@@ -38,6 +38,10 @@ class TestPhase1DataLayer(unittest.TestCase):
             contact_email="ama@example.com",
             contact_phone="+233201234567",
             agreed_discount=Decimal("20.00"),
+            settlement_type="bank",
+            settlement_bank_code="030100",
+            settlement_account_number="1234567890",
+            settlement_account_name="Ama Owusu",
         )
         self.assertEqual(seller.business_name, "Ama Supermarket")
         self.assertEqual(seller.agreed_discount, Decimal("20.00"))
@@ -49,6 +53,10 @@ class TestPhase1DataLayer(unittest.TestCase):
                 business_name="Invalid",
                 contact_email="bad@example.com",
                 agreed_discount=Decimal("0.00"),
+                settlement_type="bank",
+                settlement_bank_code="030100",
+                settlement_account_number="1234567890",
+                settlement_account_name="Invalid",
             )
 
         # Invalid discount: >= 100
@@ -57,6 +65,10 @@ class TestPhase1DataLayer(unittest.TestCase):
                 business_name="Invalid",
                 contact_email="bad@example.com",
                 agreed_discount=Decimal("100.00"),
+                settlement_type="bank",
+                settlement_bank_code="030100",
+                settlement_account_number="1234567890",
+                settlement_account_name="Invalid",
             )
 
     def test_coupon_model_sanitization(self):

@@ -1,6 +1,6 @@
 from datetime import datetime
 from decimal import Decimal
-from typing import Optional
+from typing import Literal, Optional
 from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -25,6 +25,22 @@ class SellerBase(BaseModel):
         decimal_places=2,
         description="Total agreed discount percentage D (e.g. 20.00 for 20%)",
     )
+    settlement_type: Optional[Literal["bank", "mobile_money"]] = Field(
+        default=None,
+        description="Payout destination channel: 'bank' or 'mobile_money'",
+    )
+    settlement_bank_code: Optional[str] = Field(
+        default=None,
+        description="Paystack bank code or telco code (e.g. '030100' or 'MTN')",
+    )
+    settlement_account_number: Optional[str] = Field(
+        default=None,
+        description="Bank account number or mobile money phone number",
+    )
+    settlement_account_name: Optional[str] = Field(
+        default=None,
+        description="Account holder name for settlement verification",
+    )
     is_active: bool = Field(default=True, description="Whether the seller is actively accepting payments")
 
     @field_validator("agreed_discount")
@@ -36,7 +52,26 @@ class SellerBase(BaseModel):
 
 
 class SellerCreate(SellerBase):
-    """Payload for creating a new seller."""
+    """Payload for creating and onboarding a new seller."""
+    settlement_type: Literal["bank", "mobile_money"] = Field(
+        ...,
+        description="Payout destination channel: 'bank' or 'mobile_money'",
+    )
+    settlement_bank_code: str = Field(
+        ...,
+        min_length=1,
+        description="Paystack bank code or telco code (e.g. '030100' or 'MTN')",
+    )
+    settlement_account_number: str = Field(
+        ...,
+        min_length=3,
+        description="Bank account number or mobile money phone number",
+    )
+    settlement_account_name: str = Field(
+        ...,
+        min_length=1,
+        description="Account holder name for settlement verification",
+    )
     paystack_subaccount_code: Optional[str] = Field(None, description="Paystack subaccount code (e.g. ACCT_...)")
     paystack_subaccount_id: Optional[str] = Field(None, description="Paystack subaccount ID")
 
@@ -47,6 +82,10 @@ class SellerUpdate(BaseModel):
     contact_email: Optional[str] = Field(None, pattern=r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
     contact_phone: Optional[str] = None
     agreed_discount: Optional[Decimal] = Field(None, gt=Decimal("0.00"), lt=Decimal("100.00"), decimal_places=2)
+    settlement_type: Optional[Literal["bank", "mobile_money"]] = None
+    settlement_bank_code: Optional[str] = None
+    settlement_account_number: Optional[str] = None
+    settlement_account_name: Optional[str] = None
     paystack_subaccount_code: Optional[str] = None
     paystack_subaccount_id: Optional[str] = None
     is_active: Optional[bool] = None

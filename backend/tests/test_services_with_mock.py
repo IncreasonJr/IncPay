@@ -46,6 +46,10 @@ class TestServicesWithMockSupabase(unittest.TestCase):
             "contact_email": "kofi@example.com",
             "contact_phone": "+233240000000",
             "agreed_discount": "20.00",
+            "settlement_type": "bank",
+            "settlement_bank_code": "030100",
+            "settlement_account_number": "1234567890",
+            "settlement_account_name": "Kofi Owusu",
             "paystack_subaccount_code": "ACCT_123",
             "paystack_subaccount_id": "12345",
             "is_active": True,
@@ -56,14 +60,19 @@ class TestServicesWithMockSupabase(unittest.TestCase):
         mock_execute.data = [mock_row]
         self.mock_table.insert.return_value.execute.return_value = mock_execute
 
-        with patch("app.services.seller_service.get_supabase_client", return_value=self.mock_client):
+        mock_paystack_res = {"subaccount_code": "ACCT_123", "id": 12345}
+
+        with patch("app.services.seller_service.get_supabase_client", return_value=self.mock_client), \
+             patch("app.services.paystack_service.create_subaccount", return_value=mock_paystack_res):
             seller_in = SellerCreate(
                 business_name="Kofi Electronics",
                 contact_email="kofi@example.com",
                 contact_phone="+233240000000",
                 agreed_discount=Decimal("20.00"),
-                paystack_subaccount_code="ACCT_123",
-                paystack_subaccount_id="12345",
+                settlement_type="bank",
+                settlement_bank_code="030100",
+                settlement_account_number="1234567890",
+                settlement_account_name="Kofi Owusu",
             )
             result = create_seller(seller_in)
             self.assertIsNotNone(result)

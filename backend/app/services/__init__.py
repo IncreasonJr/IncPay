@@ -1,7 +1,7 @@
 """
 IncPay Services Package.
 
-Provides database access helpers and business workflows interacting with Supabase.
+Provides database access helpers and business workflows interacting with Supabase and Paystack.
 """
 
 from app.services.seller_service import (
@@ -11,6 +11,9 @@ from app.services.seller_service import (
     list_sellers,
     update_seller,
     delete_seller,
+    calculate_percentage_charge,
+    list_banks,
+    list_mobile_money_providers,
 )
 from app.services.coupon_service import (
     create_coupon,
@@ -27,6 +30,7 @@ from app.services.transaction_service import (
 from app.services.log_service import (
     log_event,
 )
+from app.services import paystack_service
 
 __all__ = [
     # Seller service
@@ -36,6 +40,9 @@ __all__ = [
     "list_sellers",
     "update_seller",
     "delete_seller",
+    "calculate_percentage_charge",
+    "list_banks",
+    "list_mobile_money_providers",
     # Coupon service
     "create_coupon",
     "get_coupon_by_code",
@@ -48,4 +55,6 @@ __all__ = [
     "update_transaction_status",
     # Log service
     "log_event",
+    # Paystack service
+    "paystack_service",
 ]
