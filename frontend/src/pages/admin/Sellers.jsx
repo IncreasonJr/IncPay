@@ -1,20 +1,34 @@
 import React, { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import client from '../../api/client';
+import QrModal from '../../components/QrModal';
 
 export default function Sellers() {
   const { user, signOut } = useAuth();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [sellers, setSellers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [selectedQrSeller, setSelectedQrSeller] = useState(null);
 
   const fetchSellers = async () => {
     setLoading(true);
     setError(null);
     try {
       const response = await client.get('/api/sellers');
-      setSellers(response.data || []);
+      const loadedSellers = response.data || [];
+      setSellers(loadedSellers);
+
+      // Check if newly created seller ID passed in query param (?new=...)
+      const newSellerId = searchParams.get('new');
+      if (newSellerId) {
+        const found = loadedSellers.find((s) => s.id === newSellerId);
+        if (found) {
+          setSelectedQrSeller(found);
+          setSearchParams({}, { replace: true });
+        }
+      }
     } catch (err) {
       console.error('Failed to fetch sellers:', err);
       setError(err.response?.data?.detail || err.message || 'Failed to load sellers.');
@@ -182,7 +196,14 @@ export default function Sellers() {
                             {seller.is_active ? 'Active' : 'Inactive'}
                           </span>
                         </td>
-                        <td className="px-6 py-4 text-right">
+                        <td className="px-6 py-4 text-right space-x-3">
+                          <button
+                            onClick={() => setSelectedQrSeller(seller)}
+                            className="inline-flex items-center text-xs font-semibold px-2.5 py-1 bg-gray-100 hover:bg-gray-200 text-gray-800 rounded transition-colors"
+                            title="View QR Code & Coupon"
+                          >
+                            QR
+                          </button>
                           <Link
                             to={`/admin/sellers/${seller.id}/edit`}
                             className="text-sm font-medium text-gray-900 hover:text-gray-600 underline"
@@ -199,6 +220,14 @@ export default function Sellers() {
           )}
         </div>
       </main>
+
+      {/* QR Code & Coupon Modal */}
+      {selectedQrSeller && (
+        <QrModal
+          seller={selectedQrSeller}
+          onClose={() => setSelectedQrSeller(null)}
+        />
+      )}
     </div>
   );
 }

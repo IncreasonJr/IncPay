@@ -105,6 +105,7 @@ class SellerResponse(SellerBase):
     id: UUID
     paystack_subaccount_code: Optional[str] = None
     paystack_subaccount_id: Optional[str] = None
+    coupon_code: Optional[str] = None
     created_at: datetime
     updated_at: datetime
 

@@ -5,7 +5,7 @@ from uuid import UUID
 
 from app.database import get_supabase_client
 from app.models.seller import SellerCreate, SellerResponse, SellerUpdate
-from app.services import paystack_service
+from app.services import paystack_service, coupon_service
 from app.services.paystack_service import PaystackError
 
 logger = logging.getLogger(__name__)
@@ -58,7 +58,18 @@ def create_seller(seller_data: SellerCreate) -> Optional[SellerResponse]:
     try:
         res = client.table("sellers").insert(payload).execute()
         if res.data and len(res.data) > 0:
-            return SellerResponse.model_validate(res.data[0])
+            seller_dict = dict(res.data[0])
+            # 4. Automatically generate coupon for onboarded seller
+            try:
+                coupon = coupon_service.create_coupon_for_seller(
+                    seller_id=seller_dict["id"],
+                    business_name=seller_data.business_name,
+                )
+                if coupon:
+                    seller_dict["coupon_code"] = coupon.code
+            except Exception as c_exc:
+                logger.error(f"Failed to generate initial coupon for seller '{seller_data.business_name}': {c_exc}")
+            return SellerResponse.model_validate(seller_dict)
         logger.warning("No data returned after inserting seller.")
         return None
     except Exception as exc:
@@ -68,7 +79,7 @@ def create_seller(seller_data: SellerCreate) -> Optional[SellerResponse]:
 
 def get_seller(seller_id: Union[UUID, str]) -> Optional[SellerResponse]:
     """
-    Retrieve a seller by their unique UUID.
+    Retrieve a seller by their unique UUID, with active coupon attached.
     """
     client = get_supabase_client()
     if not client:
@@ -79,7 +90,14 @@ def get_seller(seller_id: Union[UUID, str]) -> Optional[SellerResponse]:
         str_id = str(seller_id)
         res = client.table("sellers").select("*").eq("id", str_id).execute()
         if res.data and len(res.data) > 0:
-            return SellerResponse.model_validate(res.data[0])
+            seller_dict = dict(res.data[0])
+            try:
+                active_coupon = coupon_service.get_active_coupon_for_seller(str_id)
+                if active_coupon:
+                    seller_dict["coupon_code"] = active_coupon.code
+            except Exception as c_exc:
+                logger.warning(f"Could not load active coupon for seller {seller_id}: {c_exc}")
+            return SellerResponse.model_validate(seller_dict)
         return None
     except Exception as exc:
         logger.error(f"Error fetching seller id '{seller_id}': {exc}")
@@ -112,9 +130,27 @@ def list_sellers(
             query = query.eq("is_active", is_active)
 
         res = query.order("created_at", desc=True).range(offset, offset + limit - 1).execute()
-        if res.data:
-            return [SellerResponse.model_validate(row) for row in res.data]
-        return []
+        if not res.data:
+            return []
+
+        # Batch lookup active coupons for list
+        coupon_map: Dict[str, str] = {}
+        try:
+            seller_ids = [str(row["id"]) for row in res.data if "id" in row]
+            if seller_ids:
+                coupons_res = client.table("coupons").select("seller_id, code").in_("seller_id", seller_ids).eq("is_active", True).execute()
+                if coupons_res.data:
+                    for c_row in coupons_res.data:
+                        coupon_map[str(c_row["seller_id"])] = c_row["code"]
+        except Exception as c_exc:
+            logger.warning(f"Could not batch fetch coupons for sellers list: {c_exc}")
+
+        results = []
+        for row in res.data:
+            s_dict = dict(row)
+            s_dict["coupon_code"] = coupon_map.get(str(s_dict.get("id")))
+            results.append(SellerResponse.model_validate(s_dict))
+        return results
     except Exception as exc:
         logger.error(f"Error listing sellers: {exc}")
         return []

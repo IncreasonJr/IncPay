@@ -16,6 +16,9 @@ class Settings(BaseSettings):
     # Frontend CORS origin
     FRONTEND_URL: str = "http://localhost:5173"
 
+    # Base URL for customer payment checkout pages
+    PAYMENT_PAGE_BASE_URL: str = "https://incpay.vercel.app"
+
     # Environment
     ENVIRONMENT: str = "development"
 

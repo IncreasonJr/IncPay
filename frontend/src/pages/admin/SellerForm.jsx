@@ -119,10 +119,12 @@ export default function SellerForm() {
     try {
       if (isEditMode) {
         await client.put(`/api/sellers/${id}`, payload);
+        navigate('/admin/sellers');
       } else {
-        await client.post('/api/sellers', payload);
+        const res = await client.post('/api/sellers', payload);
+        const newSellerId = res.data?.id;
+        navigate(newSellerId ? `/admin/sellers?new=${newSellerId}` : '/admin/sellers');
       }
-      navigate('/admin/sellers');
     } catch (err) {
       console.error('Error saving seller:', err);
       setError(
