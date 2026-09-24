@@ -2,11 +2,17 @@ import logging
 from decimal import Decimal
 from typing import Any, Dict, Optional
 from uuid import uuid4
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, Response, status
 from pydantic import BaseModel, Field
 
 from app.config import get_settings
-from app.services import coupon_service, paystack_service, transaction_service
+from app.services import (
+    coupon_service,
+    paystack_service,
+    receipt_service,
+    seller_service,
+    transaction_service,
+)
 from app.services.paystack_service import PaystackError
 
 logger = logging.getLogger(__name__)
@@ -181,6 +187,7 @@ class PaymentVerifyResponse(BaseModel):
     status: str
     amount_paid: float
     reference: str
+    customer_email: Optional[str] = None
 
 
 @router.get(
@@ -201,20 +208,30 @@ def verify_payment(reference: str) -> PaymentVerifyResponse:
         amount_paid = round(float(amount_pesewas) / 100.0, 2)
         ref_val = data.get("reference", reference)
 
+        customer = data.get("customer") or {}
+        cust_email = customer.get("email")
+        if cust_email and cust_email.lower() == "noreply@incpay.app":
+            cust_email = None
+
         return PaymentVerifyResponse(
             status=status_val,
             amount_paid=amount_paid,
             reference=ref_val,
+            customer_email=cust_email,
         )
     except PaystackError as exc:
         logger.warning(f"Paystack verification error for reference '{reference}': {exc}")
         # Check if transaction was already logged/persisted in database
         tx = transaction_service.get_transaction_by_reference(reference)
         if tx:
+            c_email = tx.customer_email
+            if c_email and c_email.lower() == "noreply@incpay.app":
+                c_email = None
             return PaymentVerifyResponse(
                 status=tx.status.value,
                 amount_paid=float(tx.amount_paid),
                 reference=tx.paystack_reference,
+                customer_email=c_email,
             )
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -226,4 +243,74 @@ def verify_payment(reference: str) -> PaymentVerifyResponse:
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Error verifying payment transaction.",
         )
+
+
+@router.get(
+    "/api/public/receipt/{reference}",
+    summary="Download payment receipt PDF",
+    response_class=Response,
+)
+def download_receipt(reference: str) -> Response:
+    """
+    Public endpoint to view or download an official PDF payment receipt.
+    No authentication required.
+    Only confirmed, successful transactions can generate receipts.
+    Sensitive merchant credentials or platform cut details are never exposed.
+    """
+    sanitized_ref = reference.strip()
+    if not sanitized_ref or len(sanitized_ref) > 100:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid payment reference format.",
+        )
+
+    # 1. Lookup transaction
+    tx = transaction_service.get_transaction_by_reference(sanitized_ref)
+    if not tx:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Transaction reference '{sanitized_ref}' not found.",
+        )
+
+    # 2. Status verification
+    tx_status = tx.status.value if hasattr(tx.status, "value") else str(tx.status)
+    if tx_status != "success":
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Receipt unavailable: payment is not in a successful state.",
+        )
+
+    # 3. Lookup seller record
+    seller = seller_service.get_seller_by_id(tx.seller_id)
+    seller_dict: Dict[str, Any] = {}
+    if seller:
+        seller_dict = seller.model_dump()
+    else:
+        # Fallback to coupon lookup if seller record not directly accessible
+        cp = coupon_service.get_active_coupon_for_seller(tx.seller_id)
+        if cp:
+            seller_dict["business_name"] = getattr(cp, "business_name", "Merchant Partner")
+
+    tx_dict = tx.model_dump()
+
+    # 4. Generate in-memory PDF
+    try:
+        pdf_bytes = receipt_service.generate_receipt_pdf(tx_dict, seller_dict)
+    except Exception as exc:
+        logger.error(f"Failed to generate receipt PDF for ref '{sanitized_ref}': {exc}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Error generating payment receipt PDF.",
+        )
+
+    # 5. Return PDF streaming response
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f'inline; filename="receipt-{sanitized_ref}.pdf"',
+            "Content-Type": "application/pdf",
+        },
+    )
+
 

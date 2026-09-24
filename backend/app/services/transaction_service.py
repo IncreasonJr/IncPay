@@ -5,7 +5,7 @@ from uuid import UUID, uuid4
 
 from app.database import get_supabase_client
 from app.models.transaction import TransactionCreate, TransactionResponse, TransactionStatus
-from app.services import coupon_service, log_service, seller_service
+from app.services import coupon_service, email_service, log_service, receipt_service, seller_service
 
 logger = logging.getLogger(__name__)
 
@@ -103,6 +103,50 @@ def update_transaction_status(
         return None
 
 
+def _send_receipt_if_eligible(
+    tx_data: Dict[str, Any],
+    seller_id: Any,
+    reference: str,
+    customer_email: Optional[str],
+    transaction_id: Optional[Any],
+    metadata: Optional[Dict[str, Any]] = None,
+) -> None:
+    """
+    Safely generates and sends a receipt PDF via email if customer email is provided.
+    Never raises an uncaught exception so the webhook execution is never disrupted.
+    """
+    if not customer_email or customer_email.strip().lower() == "noreply@incpay.app":
+        return
+
+    try:
+        seller_record = seller_service.get_seller_by_id(seller_id) if seller_id else None
+        if seller_record:
+            seller_data = seller_record.model_dump()
+        else:
+            meta = metadata or {}
+            seller_data = {
+                "business_name": meta.get("business_name") or "Merchant Partner",
+                "agreed_discount": meta.get("agreed_discount") or 20.0,
+            }
+
+        pdf_bytes = receipt_service.generate_receipt_pdf(tx_data, seller_data)
+        seller_name = seller_data.get("business_name") or "Merchant Partner"
+        email_service.send_receipt_email(customer_email, seller_name, pdf_bytes, reference)
+
+        log_service.log_event(
+            event="receipt_sent",
+            transaction_id=transaction_id,
+            payload={"customer_email": customer_email, "reference": reference},
+        )
+    except Exception as exc:
+        logger.error(f"Failed to dispatch receipt email for ref '{reference}': {exc}")
+        log_service.log_event(
+            event="receipt_failed",
+            transaction_id=transaction_id,
+            payload={"error": str(exc), "customer_email": customer_email, "reference": reference},
+        )
+
+
 def create_transaction_from_webhook(data: Dict[str, Any]) -> Dict[str, Any]:
     """
     Process incoming Paystack webhook payload and persist the verified transaction.
@@ -156,7 +200,19 @@ def create_transaction_from_webhook(data: Dict[str, Any]) -> Dict[str, Any]:
                     "reference": reference,
                 },
             )
-            return updated.model_dump() if updated else existing_tx.model_dump()
+
+            final_tx = updated or existing_tx
+            if target_status == TransactionStatus.SUCCESS:
+                _send_receipt_if_eligible(
+                    tx_data=final_tx.model_dump(),
+                    seller_id=final_tx.seller_id,
+                    reference=reference,
+                    customer_email=final_tx.customer_email,
+                    transaction_id=existing_tx.id,
+                    metadata=tx_payload.get("metadata"),
+                )
+
+            return final_tx.model_dump()
 
         logger.info(f"Duplicate webhook event received for reference '{reference}'. Ignoring duplicate.")
         return existing_tx.model_dump()
@@ -280,6 +336,18 @@ def create_transaction_from_webhook(data: Dict[str, Any]) -> Dict[str, Any]:
             transaction_id=tx_id,
             payload=data,
         )
+
+        # Trigger PDF receipt generation and email delivery if customer provided email
+        if target_status == TransactionStatus.SUCCESS:
+            tx_res_dict = created.model_dump() if created else tx_in.model_dump()
+            _send_receipt_if_eligible(
+                tx_data=tx_res_dict,
+                seller_id=seller_id,
+                reference=reference,
+                customer_email=customer_email,
+                transaction_id=tx_id,
+                metadata=metadata,
+            )
 
         return created.model_dump() if created else tx_in.model_dump()
     except Exception as exc:

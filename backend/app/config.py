@@ -13,6 +13,10 @@ class Settings(BaseSettings):
     PAYSTACK_SECRET_KEY: str = ""
     PAYSTACK_PUBLIC_KEY: str = ""
 
+    # Resend email credentials
+    RESEND_API_KEY: str = ""
+    RESEND_FROM_EMAIL: str = "onboarding@resend.dev"
+
     # Frontend CORS origin
     FRONTEND_URL: str = "http://localhost:5173"
 

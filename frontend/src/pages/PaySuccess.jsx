@@ -9,7 +9,12 @@ export default function PaySuccess() {
   const [loading, setLoading] = useState(true);
   const [status, setStatus] = useState('loading'); // 'loading' | 'verified' | 'pending' | 'failed' | 'no_reference'
   const [amountPaid, setAmountPaid] = useState(null);
+  const [customerEmail, setCustomerEmail] = useState(null);
   const [copied, setCopied] = useState(false);
+
+  const baseURL =
+    (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_API_URL) ||
+    'http://localhost:8000';
 
   const verifyPayment = useCallback(async () => {
     if (!reference || reference === '—') {
@@ -21,10 +26,13 @@ export default function PaySuccess() {
     setLoading(true);
     try {
       const res = await client.get(`/api/public/verify-payment/${encodeURIComponent(reference)}`);
-      const { status: payStatus, amount_paid } = res.data;
+      const { status: payStatus, amount_paid, customer_email } = res.data;
 
       if (amount_paid) {
         setAmountPaid(parseFloat(amount_paid));
+      }
+      if (customer_email) {
+        setCustomerEmail(customer_email);
       }
 
       const normalizedStatus = (payStatus || '').toLowerCase();
@@ -63,6 +71,8 @@ export default function PaySuccess() {
     }
   };
 
+  const receiptUrl = `${baseURL}/api/public/receipt/${encodeURIComponent(reference)}`;
+
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col justify-between py-12 px-4 sm:px-6">
       <div className="max-w-md w-full mx-auto my-auto">
@@ -87,10 +97,16 @@ export default function PaySuccess() {
 
               <h1 className="text-2xl font-black text-gray-900 mb-2">Payment Received!</h1>
 
-              <p className="text-sm text-gray-600 mb-6">
+              <p className="text-sm text-gray-600 mb-4">
                 Your payment {amountPaid ? `of ₵${amountPaid.toFixed(2)}` : ''} was processed
-                successfully. A payment confirmation and receipt will arrive shortly.
+                successfully.
               </p>
+
+              {customerEmail && (
+                <div className="bg-emerald-50 border border-emerald-100 rounded-xl p-3 mb-6 text-xs text-emerald-800 text-center">
+                  <span>✉️ A copy of your receipt has been sent to <strong>{customerEmail}</strong></span>
+                </div>
+              )}
             </div>
           )}
 
@@ -166,13 +182,41 @@ export default function PaySuccess() {
             </div>
           )}
 
-          {/* Done Action */}
-          <Link
-            to="/"
-            className="block w-full py-3 px-4 bg-gray-900 hover:bg-gray-800 text-white font-semibold text-sm rounded-xl shadow-sm transition-colors text-center"
-          >
-            Done
-          </Link>
+          {/* Action Buttons */}
+          <div className="space-y-3">
+            {/* Download Receipt PDF Button (Only on verified success) */}
+            {!loading && status === 'verified' && reference && (
+              <a
+                href={receiptUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                download={`receipt-${reference}.pdf`}
+                className="w-full flex items-center justify-center space-x-2 py-3 px-4 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-sm rounded-xl shadow-sm transition-colors text-center"
+              >
+                <svg
+                  className="w-4 h-4 shrink-0"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth="2"
+                    d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
+                  />
+                </svg>
+                <span>Download Receipt (PDF)</span>
+              </a>
+            )}
+
+            <Link
+              to="/"
+              className="block w-full py-3 px-4 bg-gray-900 hover:bg-gray-800 text-white font-semibold text-sm rounded-xl shadow-sm transition-colors text-center"
+            >
+              Done
+            </Link>
+          </div>
         </div>
       </div>
 
