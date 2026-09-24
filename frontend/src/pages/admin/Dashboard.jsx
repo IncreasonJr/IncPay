@@ -62,6 +62,12 @@ export default function Dashboard() {
               >
                 Sellers
               </Link>
+              <Link
+                to="/admin/transactions"
+                className="text-sm font-medium text-gray-500 hover:text-gray-900 px-3 py-2 rounded-md transition-colors"
+              >
+                Transactions
+              </Link>
             </nav>
           </div>
 
@@ -92,7 +98,7 @@ export default function Dashboard() {
         </div>
 
         {/* Quick Actions & Navigation Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
           {/* Sellers Card */}
           <div className="bg-white border border-gray-200 rounded-lg p-6 shadow-sm flex flex-col justify-between">
             <div>
@@ -103,7 +109,7 @@ export default function Dashboard() {
                 </span>
               </div>
               <p className="text-sm text-gray-600 mb-6">
-                Register merchant partners, configure agreed discount percentage rates (D), and automatically generate Paystack settlement subaccounts for mobile money and bank accounts.
+                Register merchant partners, configure agreed discount percentage rates (D), and automatically generate Paystack settlement subaccounts.
               </p>
             </div>
             <div className="flex space-x-3">
@@ -118,6 +124,29 @@ export default function Dashboard() {
                 className="py-2 px-4 border border-gray-300 hover:bg-gray-50 text-gray-700 text-sm font-medium rounded-md transition-colors"
               >
                 + New Seller
+              </Link>
+            </div>
+          </div>
+
+          {/* Transactions Card */}
+          <div className="bg-white border border-gray-200 rounded-lg p-6 shadow-sm flex flex-col justify-between">
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <h3 className="text-base font-semibold text-gray-900">Transaction Ledger</h3>
+                <span className="text-xs font-semibold px-2 py-0.5 bg-purple-50 text-purple-700 rounded">
+                  Phase 8
+                </span>
+              </div>
+              <p className="text-sm text-gray-600 mb-6">
+                Live ledger of customer payments, margin splits, Paystack webhook event history, PDF receipt downloads, and receipt resends.
+              </p>
+            </div>
+            <div>
+              <Link
+                to="/admin/transactions"
+                className="block text-center py-2 px-4 bg-gray-900 hover:bg-gray-800 text-white text-sm font-medium rounded-md transition-colors"
+              >
+                View Transactions &rarr;
               </Link>
             </div>
           </div>

@@ -1,6 +1,6 @@
 import logging
 from decimal import Decimal, ROUND_HALF_UP
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, Tuple, Union
 from uuid import UUID, uuid4
 
 from app.database import get_supabase_client
@@ -50,6 +50,77 @@ def get_transaction_by_reference(reference: str) -> Optional[TransactionResponse
     except Exception as exc:
         logger.error(f"Error fetching transaction reference '{reference}': {exc}")
         return None
+
+
+def get_transaction_by_id(transaction_id: Union[UUID, str]) -> Optional[TransactionResponse]:
+    """
+    Retrieve a transaction record by its primary UUID.
+    """
+    client = get_supabase_client()
+    if not client:
+        logger.error("Supabase client not initialized. Cannot fetch transaction.")
+        return None
+
+    try:
+        res = client.table("transactions").select("*").eq("id", str(transaction_id)).execute()
+        if res.data and len(res.data) > 0:
+            return TransactionResponse.model_validate(res.data[0])
+        return None
+    except Exception as exc:
+        logger.error(f"Error fetching transaction id '{transaction_id}': {exc}")
+        return None
+
+
+def list_transactions_filtered(
+    seller_id: Optional[Union[UUID, str]] = None,
+    status: Optional[str] = None,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    search: Optional[str] = None,
+    page: int = 1,
+    page_size: int = 25,
+) -> Tuple[List[TransactionResponse], int]:
+    """
+    Query transactions with filters, search, and pagination.
+    Returns (items, total_count).
+    """
+    client = get_supabase_client()
+    if not client:
+        logger.error("Supabase client not initialized. Cannot query transactions.")
+        return [], 0
+
+    try:
+        query = client.table("transactions").select("*", count="exact")
+
+        if seller_id:
+            query = query.eq("seller_id", str(seller_id))
+        if status:
+            query = query.eq("status", status.lower().strip())
+        if start_date:
+            s_date = start_date.strip()
+            if len(s_date) == 10:
+                s_date = f"{s_date}T00:00:00Z"
+            query = query.gte("created_at", s_date)
+        if end_date:
+            e_date = end_date.strip()
+            if len(e_date) == 10:
+                e_date = f"{e_date}T23:59:59.999Z"
+            query = query.lte("created_at", e_date)
+        if search:
+            clean_search = search.strip()
+            query = query.or_(f"paystack_reference.ilike.%{clean_search}%,customer_email.ilike.%{clean_search}%")
+
+        offset = max(0, (page - 1) * page_size)
+        res = query.order("created_at", desc=True).range(offset, offset + page_size - 1).execute()
+
+        total = getattr(res, "count", None)
+        if total is None:
+            total = len(res.data or [])
+        items = [TransactionResponse.model_validate(row) for row in (res.data or [])]
+        return items, total
+    except Exception as exc:
+        logger.error(f"Error executing filtered transactions query: {exc}")
+        return [], 0
 
 
 def list_transactions(

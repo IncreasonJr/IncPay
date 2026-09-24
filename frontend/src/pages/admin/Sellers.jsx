@@ -67,6 +67,12 @@ export default function Sellers() {
               >
                 Sellers
               </Link>
+              <Link
+                to="/admin/transactions"
+                className="text-sm font-medium text-gray-500 hover:text-gray-900 px-3 py-2 rounded-md transition-colors"
+              >
+                Transactions
+              </Link>
             </nav>
           </div>
 

@@ -7,6 +7,8 @@ import PaySuccess from './pages/PaySuccess';
 import Dashboard from './pages/admin/Dashboard';
 import Sellers from './pages/admin/Sellers';
 import SellerForm from './pages/admin/SellerForm';
+import Transactions from './pages/admin/Transactions';
+import TransactionDetail from './pages/admin/TransactionDetail';
 import ProtectedRoute from './components/ProtectedRoute';
 
 export default function App() {
@@ -50,6 +52,22 @@ export default function App() {
           element={
             <ProtectedRoute>
               <SellerForm />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin/transactions"
+          element={
+            <ProtectedRoute>
+              <Transactions />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin/transactions/:id"
+          element={
+            <ProtectedRoute>
+              <TransactionDetail />
             </ProtectedRoute>
           }
         />
