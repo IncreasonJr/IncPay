@@ -2,6 +2,8 @@ import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import Home from './pages/Home';
 import Login from './pages/Login';
+import Pay from './pages/Pay';
+import PaySuccess from './pages/PaySuccess';
 import Dashboard from './pages/admin/Dashboard';
 import Sellers from './pages/admin/Sellers';
 import SellerForm from './pages/admin/SellerForm';
@@ -13,6 +15,12 @@ export default function App() {
       <Routes>
         <Route path="/" element={<Home />} />
         <Route path="/login" element={<Login />} />
+
+        {/* Public Customer Payment Routes */}
+        <Route path="/pay/:couponCode" element={<Pay />} />
+        <Route path="/pay/success" element={<PaySuccess />} />
+
+        {/* Protected Admin Routes */}
         <Route
           path="/admin"
           element={

@@ -127,20 +127,26 @@ def get_coupon_by_code(code: str) -> Optional[CouponDetails]:
         seller_id = coupon_row.get("seller_id")
         business_name = None
         agreed_discount = None
+        subaccount_code = None
 
         if seller_id:
             try:
-                seller_res = client.table("sellers").select("business_name, agreed_discount, is_active").eq("id", str(seller_id)).execute()
+                seller_res = client.table("sellers").select("business_name, agreed_discount, paystack_subaccount_code, is_active").eq("id", str(seller_id)).execute()
                 if seller_res.data and len(seller_res.data) > 0:
                     s_data = seller_res.data[0]
+                    # If seller itself is inactive, reject coupon
+                    if s_data.get("is_active") is False:
+                        return None
                     business_name = s_data.get("business_name")
                     agreed_discount = s_data.get("agreed_discount")
+                    subaccount_code = s_data.get("paystack_subaccount_code")
             except Exception as s_exc:
                 logger.warning(f"Failed to fetch joined seller for coupon '{code}': {s_exc}")
 
         details = dict(coupon_row)
         details["business_name"] = business_name
         details["agreed_discount"] = agreed_discount
+        details["paystack_subaccount_code"] = subaccount_code
         return CouponDetails(details)
     except Exception as exc:
         logger.error(f"Error fetching coupon code '{code}': {exc}")

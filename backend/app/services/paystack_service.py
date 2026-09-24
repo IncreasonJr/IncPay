@@ -1,5 +1,6 @@
 import logging
-from typing import Any, Dict, List, Optional
+from decimal import Decimal
+from typing import Any, Dict, List, Optional, Union
 import httpx
 
 from app.config import get_settings
@@ -201,3 +202,57 @@ def list_mobile_money_providers(currency: str = "GHS") -> List[Dict[str, str]]:
     Return supported Ghanaian Mobile Money providers (MTN, Telecel/Vodafone, AT/AirtelTigo).
     """
     return GHANA_MOBILE_MONEY_PROVIDERS
+
+
+def initialize_transaction(
+    email: str,
+    amount_ghs: Union[Decimal, float],
+    reference: str,
+    subaccount_code: str,
+    metadata: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    """
+    Initialize a Paystack split transaction.
+    - Amount is converted to pesewas (GHS * 100, integer).
+    - subaccount is the seller's Paystack subaccount_code.
+    - bearer is 'account' (platform bears the transaction fee).
+    - currency is GHS.
+    """
+    url = f"{PAYSTACK_BASE_URL}/transaction/initialize"
+    headers = _get_headers()
+
+    amount_pesewas = int(round(float(amount_ghs) * 100))
+    if amount_pesewas <= 0:
+        raise ValueError("Transaction amount in pesewas must be greater than zero.")
+
+    payload: Dict[str, Any] = {
+        "email": email,
+        "amount": amount_pesewas,
+        "reference": reference,
+        "currency": "GHS",
+        "subaccount": subaccount_code,
+        "bearer": "account",
+        "metadata": metadata or {},
+    }
+
+    try:
+        with httpx.Client(timeout=15.0) as client:
+            response = client.post(url, headers=headers, json=payload)
+
+        data = response.json()
+        if response.is_success and data.get("status") is True:
+            return data.get("data", {})
+
+        error_msg = data.get("message", "Paystack transaction initialization failed.")
+        logger.error(f"Paystack transaction initialization error: {error_msg}")
+        raise PaystackError(error_msg, status_code=response.status_code)
+
+    except httpx.RequestError as exc:
+        logger.error(f"HTTP connection error initializing Paystack transaction: {exc}")
+        raise PaystackError(f"Network error contacting Paystack: {exc}")
+    except PaystackError:
+        raise
+    except Exception as exc:
+        logger.error(f"Unexpected error initializing Paystack transaction: {exc}")
+        raise PaystackError(f"Unexpected Paystack error: {exc}")
+

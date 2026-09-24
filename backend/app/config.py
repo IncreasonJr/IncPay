@@ -19,6 +19,9 @@ class Settings(BaseSettings):
     # Base URL for customer payment checkout pages
     PAYMENT_PAGE_BASE_URL: str = "https://incpay.vercel.app"
 
+    # Minimum payment listed amount in GHS (₵)
+    MIN_PAYMENT_AMOUNT: float = 1.0
+
     # Environment
     ENVIRONMENT: str = "development"
 
