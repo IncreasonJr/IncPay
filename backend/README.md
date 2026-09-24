@@ -57,3 +57,55 @@ By default, the server runs on `http://localhost:8000`.
 | `PAYSTACK_PUBLIC_KEY` | Paystack public key |
 | `FRONTEND_URL` | Allowed origin for CORS (e.g. `http://localhost:5173`) |
 | `ENVIRONMENT` | Environment name (e.g. `development`, `production`) |
+
+---
+
+## Local Webhook Testing with Ngrok
+
+To receive live Paystack webhook callbacks on your local development machine:
+
+### 1. Install Ngrok
+
+- **macOS (Homebrew):** `brew install ngrok/ngrok/ngrok`
+- **Linux (Snap):** `sudo snap install ngrok`
+- **Linux (Apt):**
+  ```bash
+  curl -s https://ngrok-agent.s3.amazonaws.com/ngrok.asc \
+    | sudo tee /etc/apt/trusted.gpg.d/ngrok.asc >/dev/null \
+    && echo "deb https://ngrok-agent.s3.amazonaws.com buster main" \
+    | sudo tee /etc/apt/sources.list.d/ngrok.list \
+    && sudo apt update && sudo apt install ngrok
+  ```
+- **npm:** `npm install -g ngrok`
+
+Authenticate your agent (get your authtoken from [dashboard.ngrok.com](https://dashboard.ngrok.com)):
+```bash
+ngrok config add-authtoken <YOUR_NGROK_AUTHTOKEN>
+```
+
+### 2. Expose Local Port 8000
+
+With your FastAPI server running on `http://localhost:8000`, start the tunnel:
+
+```bash
+ngrok http 8000
+```
+
+Ngrok provides a public forwarding URL such as `https://abcdef123.ngrok-free.app`.
+
+### 3. Configure Paystack Webhook URL
+
+1. Go to your [Paystack Dashboard](https://dashboard.paystack.com/#/settings/developer).
+2. Navigate to **Settings** → **API Keys & Webhooks**.
+3. Under **Test Webhook URL** (or Live Webhook URL in production), configure:
+   ```
+   https://<ngrok-id>.ngrok-free.app/api/webhooks/paystack
+   ```
+4. Save changes.
+
+### 4. Enabled Webhook Events
+
+Ensure the following events are enabled to receive payment notifications:
+- `charge.success`: Triggered when customer completes payment and split settlement succeeds.
+- `charge.failed`: Triggered when customer transaction fails or is declined.
+

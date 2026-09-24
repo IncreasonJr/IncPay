@@ -1,3 +1,5 @@
+import hashlib
+import hmac
 import logging
 from decimal import Decimal
 from typing import Any, Dict, List, Optional, Union
@@ -255,4 +257,59 @@ def initialize_transaction(
     except Exception as exc:
         logger.error(f"Unexpected error initializing Paystack transaction: {exc}")
         raise PaystackError(f"Unexpected Paystack error: {exc}")
+
+
+def verify_webhook_signature(raw_body: bytes, signature: Optional[str]) -> bool:
+    """
+    Verify that the webhook request arrived authentically from Paystack.
+    Computes HMAC SHA512 of raw_body using PAYSTACK_SECRET_KEY and compares
+    in constant time with the x-paystack-signature header.
+    """
+    if not signature or not raw_body:
+        return False
+
+    settings = get_settings()
+    secret_key = settings.PAYSTACK_SECRET_KEY
+    if not secret_key:
+        logger.error("Cannot verify webhook signature: PAYSTACK_SECRET_KEY is empty.")
+        return False
+
+    computed = hmac.new(
+        key=secret_key.encode("utf-8"),
+        msg=raw_body,
+        digestmod=hashlib.sha512,
+    ).hexdigest()
+
+    return hmac.compare_digest(computed.lower(), signature.strip().lower())
+
+
+def verify_transaction(reference: str) -> Dict[str, Any]:
+    """
+    Verify a Paystack transaction by reference.
+    Calls GET https://api.paystack.co/transaction/verify/{reference}
+    """
+    url = f"{PAYSTACK_BASE_URL}/transaction/verify/{reference}"
+    headers = _get_headers()
+
+    try:
+        with httpx.Client(timeout=15.0) as client:
+            response = client.get(url, headers=headers)
+
+        data = response.json()
+        if response.is_success and data.get("status") is True:
+            return data.get("data", {})
+
+        error_msg = data.get("message", "Paystack transaction verification failed.")
+        logger.error(f"Paystack verification error ({response.status_code}): {error_msg}")
+        raise PaystackError(error_msg, status_code=response.status_code)
+
+    except httpx.RequestError as exc:
+        logger.error(f"HTTP connection error verifying Paystack transaction: {exc}")
+        raise PaystackError(f"Network error contacting Paystack: {exc}")
+    except PaystackError:
+        raise
+    except Exception as exc:
+        logger.error(f"Unexpected error verifying Paystack transaction: {exc}")
+        raise PaystackError(f"Unexpected Paystack error: {exc}")
+
 

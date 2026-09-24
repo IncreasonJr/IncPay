@@ -53,6 +53,11 @@ class SellerBase(BaseModel):
 
 class SellerCreate(SellerBase):
     """Payload for creating and onboarding a new seller."""
+    contact_phone: str = Field(
+        ...,
+        min_length=3,
+        description="Contact phone number (e.g. +233...)",
+    )
     settlement_type: Literal["bank", "mobile_money"] = Field(
         ...,
         description="Payout destination channel: 'bank' or 'mobile_money'",

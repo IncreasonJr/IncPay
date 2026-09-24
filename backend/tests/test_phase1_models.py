@@ -52,6 +52,7 @@ class TestPhase1DataLayer(unittest.TestCase):
             SellerCreate(
                 business_name="Invalid",
                 contact_email="bad@example.com",
+                contact_phone="+233201234567",
                 agreed_discount=Decimal("0.00"),
                 settlement_type="bank",
                 settlement_bank_code="030100",
@@ -64,11 +65,24 @@ class TestPhase1DataLayer(unittest.TestCase):
             SellerCreate(
                 business_name="Invalid",
                 contact_email="bad@example.com",
+                contact_phone="+233201234567",
                 agreed_discount=Decimal("100.00"),
                 settlement_type="bank",
                 settlement_bank_code="030100",
                 settlement_account_number="1234567890",
                 settlement_account_name="Invalid",
+            )
+
+        # Missing contact_phone: required on SellerCreate
+        with self.assertRaises(ValidationError):
+            SellerCreate(
+                business_name="Missing Phone",
+                contact_email="seller@example.com",
+                agreed_discount=Decimal("20.00"),
+                settlement_type="bank",
+                settlement_bank_code="030100",
+                settlement_account_number="1234567890",
+                settlement_account_name="Seller",
             )
 
     def test_coupon_model_sanitization(self):

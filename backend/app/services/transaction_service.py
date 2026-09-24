@@ -1,9 +1,11 @@
 import logging
-from typing import List, Optional, Union
-from uuid import UUID
+from decimal import Decimal, ROUND_HALF_UP
+from typing import Any, Dict, List, Optional, Union
+from uuid import UUID, uuid4
 
 from app.database import get_supabase_client
 from app.models.transaction import TransactionCreate, TransactionResponse, TransactionStatus
+from app.services import coupon_service, log_service, seller_service
 
 logger = logging.getLogger(__name__)
 
@@ -99,3 +101,192 @@ def update_transaction_status(
     except Exception as exc:
         logger.error(f"Error updating transaction status for reference '{reference}': {exc}")
         return None
+
+
+def create_transaction_from_webhook(data: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Process incoming Paystack webhook payload and persist the verified transaction.
+    - Extracts reference, amount (converted from pesewas to GHS), status, customer_email, metadata.
+    - Idempotency: Returns existing record if duplicate paystack_reference is received.
+    - Reconciliation safety: Reconciles status if Paystack updates payment outcome.
+    - Recalculates split values from the seller's agreed discount and amount paid.
+    - Always records raw event payload in transaction_logs.
+    """
+    raw_event = data.get("event", "")
+    tx_payload = data.get("data") if isinstance(data.get("data"), dict) else data
+
+    reference = tx_payload.get("reference")
+    if not reference:
+        logger.error("Webhook payload missing transaction reference.")
+        log_service.log_event(event=raw_event or "webhook_missing_reference", payload=data)
+        return {}
+
+    # 1. Determine target transaction status
+    status_str = str(tx_payload.get("status") or "").lower()
+    if raw_event == "charge.failed" or status_str == "failed":
+        target_status = TransactionStatus.FAILED
+    elif raw_event == "charge.success" or status_str == "success":
+        target_status = TransactionStatus.SUCCESS
+    else:
+        target_status = TransactionStatus.PENDING
+
+    # 2. Check for existing transaction (Idempotency + Reconciliation)
+    existing_tx = get_transaction_by_reference(reference)
+    if existing_tx:
+        # Always insert an audit record into transaction_logs
+        log_service.log_event(
+            event=raw_event or f"webhook_{target_status.value}",
+            transaction_id=existing_tx.id,
+            payload=data,
+        )
+
+        # Status reconciliation if status differs
+        if existing_tx.status != target_status:
+            logger.info(
+                f"Reconciling status for reference '{reference}': "
+                f"{existing_tx.status.value} -> {target_status.value}"
+            )
+            updated = update_transaction_status(reference, target_status)
+            log_service.log_event(
+                event="transaction_status_reconciled",
+                transaction_id=existing_tx.id,
+                payload={
+                    "old_status": existing_tx.status.value,
+                    "new_status": target_status.value,
+                    "reference": reference,
+                },
+            )
+            return updated.model_dump() if updated else existing_tx.model_dump()
+
+        logger.info(f"Duplicate webhook event received for reference '{reference}'. Ignoring duplicate.")
+        return existing_tx.model_dump()
+
+    # 3. Extract transaction details
+    amount_pesewas = tx_payload.get("amount", 0)
+    customer = tx_payload.get("customer") or {}
+    customer_email = customer.get("email") or tx_payload.get("customer_email")
+    metadata = tx_payload.get("metadata") or {}
+
+    seller_id_raw = metadata.get("seller_id")
+    coupon_code = metadata.get("coupon_code")
+
+    # 4. Resolve Seller and Coupon details
+    seller_id: Optional[UUID] = None
+    coupon_id: Optional[UUID] = None
+    agreed_discount: Optional[Decimal] = None
+
+    if coupon_code:
+        coupon = coupon_service.get_coupon_by_code(coupon_code)
+        if coupon:
+            if "id" in coupon:
+                try:
+                    coupon_id = UUID(str(coupon["id"]))
+                except ValueError:
+                    pass
+            if "seller_id" in coupon:
+                try:
+                    seller_id = UUID(str(coupon["seller_id"]))
+                except ValueError:
+                    pass
+            if coupon.get("agreed_discount") is not None:
+                try:
+                    agreed_discount = Decimal(str(coupon["agreed_discount"]))
+                except Exception:
+                    pass
+
+    if not seller_id and seller_id_raw:
+        try:
+            seller_id = UUID(str(seller_id_raw))
+        except ValueError:
+            pass
+
+    if seller_id and (agreed_discount is None or coupon_id is None):
+        seller = seller_service.get_seller_by_id(seller_id)
+        if seller:
+            if agreed_discount is None:
+                agreed_discount = Decimal(str(seller.agreed_discount))
+            if coupon_id is None:
+                active_cp = coupon_service.get_active_coupon_for_seller(seller_id)
+                if active_cp:
+                    coupon_id = active_cp.id
+
+    # Fallback defaults for missing/unconfigured references
+    if agreed_discount is None:
+        raw_d = metadata.get("agreed_discount")
+        agreed_discount = Decimal(str(raw_d)) if raw_d else Decimal("20.00")
+    if seller_id is None:
+        seller_id = uuid4()
+    if coupon_id is None:
+        coupon_id = uuid4()
+
+    # 5. Financial recalculations in Ghanaian Cedis (₵)
+    quantize_cents = Decimal("0.01")
+    amount_paid_ghs = (Decimal(str(amount_pesewas)) / Decimal("100.00")).quantize(
+        quantize_cents, rounding=ROUND_HALF_UP
+    )
+    if amount_paid_ghs <= Decimal("0.00"):
+        amount_paid_ghs = Decimal("1.00")
+
+    d = agreed_discount
+
+    # Derive listed_amount from amount_paid: A_listed = A_paid * 200 / (200 - D)
+    meta_listed = metadata.get("listed_amount")
+    split: Optional[Dict[str, Decimal]] = None
+    if meta_listed:
+        try:
+            candidate_listed = Decimal(str(meta_listed)).quantize(quantize_cents, rounding=ROUND_HALF_UP)
+            cand_split = TransactionCreate.calculate_split(candidate_listed, d)
+            if abs(cand_split["amount_paid"] - amount_paid_ghs) <= Decimal("0.05"):
+                split = cand_split
+        except Exception:
+            pass
+
+    if not split:
+        derived_listed = (amount_paid_ghs * Decimal("200.00") / (Decimal("200.00") - d)).quantize(
+            quantize_cents, rounding=ROUND_HALF_UP
+        )
+        split = TransactionCreate.calculate_split(derived_listed, d)
+
+    listed_amount = split["listed_amount"]
+    customer_discount_amount = split["customer_discount_amount"]
+    platform_cut_amount = split["customer_discount_amount"]
+    actual_amount_paid = amount_paid_ghs
+    seller_payout_amount = (actual_amount_paid - platform_cut_amount).quantize(
+        quantize_cents, rounding=ROUND_HALF_UP
+    )
+
+    # 6. Build and validate TransactionCreate model
+    tx_in = TransactionCreate(
+        seller_id=seller_id,
+        coupon_id=coupon_id,
+        paystack_reference=reference,
+        currency="GHS",
+        listed_amount=listed_amount,
+        customer_discount_amount=customer_discount_amount,
+        amount_paid=actual_amount_paid,
+        platform_cut_amount=platform_cut_amount,
+        seller_payout_amount=seller_payout_amount,
+        status=target_status,
+        customer_email=customer_email,
+    )
+
+    # 7. Persist transaction and log event
+    try:
+        created = create_transaction(tx_in)
+        tx_id = created.id if created else None
+
+        log_service.log_event(
+            event=raw_event or f"webhook_{target_status.value}",
+            transaction_id=tx_id,
+            payload=data,
+        )
+
+        return created.model_dump() if created else tx_in.model_dump()
+    except Exception as exc:
+        logger.error(f"Failed to persist transaction from webhook '{reference}': {exc}")
+        log_service.log_event(
+            event="webhook_insert_error",
+            payload={"error": str(exc), "reference": reference, "raw_data": data},
+        )
+        return tx_in.model_dump()
+

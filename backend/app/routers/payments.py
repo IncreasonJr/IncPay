@@ -6,7 +6,7 @@ from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel, Field
 
 from app.config import get_settings
-from app.services import coupon_service, paystack_service
+from app.services import coupon_service, paystack_service, transaction_service
 from app.services.paystack_service import PaystackError
 
 logger = logging.getLogger(__name__)
@@ -174,3 +174,56 @@ def initialize_payment(request: PaymentInitializeRequest) -> PaymentInitializeRe
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error initializing payment: {str(exc)}",
         )
+
+
+class PaymentVerifyResponse(BaseModel):
+    """Sanitized public verification details for customer receipt confirmation."""
+    status: str
+    amount_paid: float
+    reference: str
+
+
+@router.get(
+    "/api/public/verify-payment/{reference}",
+    response_model=PaymentVerifyResponse,
+    summary="Verify payment reference with Paystack",
+)
+def verify_payment(reference: str) -> PaymentVerifyResponse:
+    """
+    Public endpoint to verify payment status with Paystack by reference.
+    Used by customer checkout success screen to confirm settlement.
+    Does NOT leak merchant credentials, margin splits, or subaccounts.
+    """
+    try:
+        data = paystack_service.verify_transaction(reference)
+        status_val = data.get("status", "unknown")
+        amount_pesewas = data.get("amount", 0)
+        amount_paid = round(float(amount_pesewas) / 100.0, 2)
+        ref_val = data.get("reference", reference)
+
+        return PaymentVerifyResponse(
+            status=status_val,
+            amount_paid=amount_paid,
+            reference=ref_val,
+        )
+    except PaystackError as exc:
+        logger.warning(f"Paystack verification error for reference '{reference}': {exc}")
+        # Check if transaction was already logged/persisted in database
+        tx = transaction_service.get_transaction_by_reference(reference)
+        if tx:
+            return PaymentVerifyResponse(
+                status=tx.status.value,
+                amount_paid=float(tx.amount_paid),
+                reference=tx.paystack_reference,
+            )
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Transaction reference '{reference}' not found.",
+        )
+    except Exception as exc:
+        logger.error(f"Unexpected error verifying reference '{reference}': {exc}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Error verifying payment transaction.",
+        )
+

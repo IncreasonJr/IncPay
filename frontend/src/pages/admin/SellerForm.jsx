@@ -107,7 +107,7 @@ export default function SellerForm() {
     const payload = {
       business_name: businessName.trim(),
       contact_email: contactEmail.trim(),
-      contact_phone: contactPhone.trim() || null,
+      contact_phone: contactPhone.trim(),
       agreed_discount: parseFloat(agreedDiscount),
       settlement_type: settlementType,
       settlement_bank_code: settlementBankCode,
@@ -246,10 +246,11 @@ export default function SellerForm() {
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Contact Phone (Optional)
+                    Contact Phone <span className="text-red-500">*</span>
                   </label>
                   <input
                     type="text"
+                    required
                     value={contactPhone}
                     onChange={(e) => setContactPhone(e.target.value)}
                     placeholder="+233 24 000 0000"
