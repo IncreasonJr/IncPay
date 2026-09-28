@@ -139,9 +139,10 @@ export default function Pay() {
     <div className="min-h-screen bg-gradient-to-b from-gray-50 to-gray-100 flex flex-col justify-between py-12 px-4 sm:px-6">
       <div className="max-w-md w-full mx-auto">
         {/* IncPay Platform Top Bar */}
-        <div className="text-center mb-6">
-          <span className="text-xs uppercase tracking-widest font-bold text-gray-400">
-            IncPay Payment Bridge
+        <div className="flex flex-col items-center mb-6">
+          <img src="/logo.png" alt="IncPay" className="h-8 w-auto object-contain mb-1.5" />
+          <span className="text-[11px] uppercase tracking-widest font-semibold text-gray-400">
+            Payment Bridge
           </span>
         </div>
 

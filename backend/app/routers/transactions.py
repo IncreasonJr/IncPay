@@ -282,7 +282,7 @@ def resend_receipt(
     if status_str != "success":
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Cannot resend receipt for unsuccessful or pending transactions.",
+            detail="Receipt can only be sent for successful transactions (cannot resend for unsuccessful or pending transactions).",
         )
 
     recipient = (tx.customer_email or "").strip()

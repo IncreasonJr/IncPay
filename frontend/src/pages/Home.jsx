@@ -33,7 +33,9 @@ export default function Home() {
   return (
     <div className="min-h-screen flex items-center justify-center p-6 bg-gray-50 text-gray-900">
       <div className="w-full max-w-md bg-white border border-gray-200 rounded-lg p-6 shadow-sm">
-        <h1 className="text-2xl font-bold text-gray-900 mb-2">IncPay</h1>
+        <div className="mb-4">
+          <img src="/logo.png" alt="IncPay" className="h-9 w-auto object-contain" />
+        </div>
         <p className="text-sm text-gray-600 mb-6">
           Payment-bridge platform connecting sellers and customers.
         </p>

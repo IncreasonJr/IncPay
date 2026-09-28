@@ -1,13 +1,16 @@
 import logging
-from decimal import Decimal
+import re
+from decimal import Decimal, ROUND_HALF_UP
 from typing import Any, Dict, Optional
 from uuid import uuid4
-from fastapi import APIRouter, HTTPException, Response, status
+from fastapi import APIRouter, HTTPException, Request, Response, status
 from pydantic import BaseModel, Field
 
 from app.config import get_settings
+from app.limiter import limiter
 from app.services import (
     coupon_service,
+    log_service,
     paystack_service,
     receipt_service,
     seller_service,
@@ -18,6 +21,10 @@ from app.services.paystack_service import PaystackError
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["Payments"])
+
+COUPON_CODE_REGEX = re.compile(r"^[A-Z0-9-]{4,32}$")
+REFERENCE_REGEX = re.compile(r"^[A-Za-z0-9_-]{8,64}$")
+EMAIL_REGEX = re.compile(r"^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$")
 
 
 class PublicCouponResponse(BaseModel):
@@ -33,8 +40,6 @@ class PaymentInitializeRequest(BaseModel):
     coupon_code: str = Field(..., min_length=2, max_length=50, description="Seller coupon code")
     listed_amount: Decimal = Field(
         ...,
-        gt=Decimal("0.00"),
-        decimal_places=2,
         description="Original listed bill amount before discount in GHS (₵)",
     )
     email: Optional[str] = Field(None, description="Customer contact email for payment receipt")
@@ -55,18 +60,36 @@ class PaymentInitializeResponse(BaseModel):
     response_model=PublicCouponResponse,
     summary="Public coupon lookup",
 )
-def get_public_coupon(code: str) -> PublicCouponResponse:
+@limiter.limit("30/minute")
+def get_public_coupon(request: Request, code: str) -> PublicCouponResponse:
     """
     Look up coupon and return safe public merchant details.
     No authentication required.
     Does NOT leak merchant contact emails, phone numbers, or subaccount keys.
     """
-    coupon = coupon_service.get_coupon_by_code(code)
-    if not coupon or not coupon.get("is_active"):
+    clean_code = (code or "").strip().upper()
+    if not COUPON_CODE_REGEX.match(clean_code):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Invalid or expired coupon.",
         )
+
+    coupon = coupon_service.get_coupon_by_code(clean_code)
+    if not coupon or not coupon.get("is_active"):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="This coupon is no longer valid",
+        )
+
+    # Verify merchant account status
+    seller_id = coupon.get("seller_id")
+    if seller_id:
+        seller = seller_service.get_seller_by_id(seller_id)
+        if seller and not seller.is_active:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="This coupon is no longer valid",
+            )
 
     business_name = coupon.get("business_name") or "Merchant Partner"
     agreed_discount = float(coupon.get("agreed_discount") or 0.0)
@@ -85,7 +108,11 @@ def get_public_coupon(code: str) -> PublicCouponResponse:
     response_model=PaymentInitializeResponse,
     summary="Initialize Paystack payment checkout",
 )
-def initialize_payment(request: PaymentInitializeRequest) -> PaymentInitializeResponse:
+@limiter.limit("10/minute")
+def initialize_payment(
+    request: Request,
+    payment_data: PaymentInitializeRequest,
+) -> PaymentInitializeResponse:
     """
     Initialize a customer payment checkout session.
     No authentication required.
@@ -93,36 +120,85 @@ def initialize_payment(request: PaymentInitializeRequest) -> PaymentInitializeRe
     """
     settings = get_settings()
 
-    # 1. Validate minimum payment amount
+    # 1. Validate listed amount value and bounds
+    raw_amount = payment_data.listed_amount
+    if raw_amount <= Decimal("0.00"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Listed amount must be greater than zero.",
+        )
+
+    # Consistently round to 2 decimal places
+    listed_amount = raw_amount.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+
     min_amount = Decimal(str(settings.MIN_PAYMENT_AMOUNT))
-    if request.listed_amount < min_amount:
+    if listed_amount < min_amount:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Minimum payment amount is ₵{settings.MIN_PAYMENT_AMOUNT:.2f}",
         )
 
-    # 2. Look up coupon and verify merchant
-    coupon = coupon_service.get_coupon_by_code(request.coupon_code)
-    if not coupon or not coupon.get("is_active"):
+    max_amount = Decimal(str(settings.MAX_PAYMENT_AMOUNT))
+    if listed_amount > max_amount:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Maximum payment amount is ₵{settings.MAX_PAYMENT_AMOUNT:,.2f}",
+        )
+
+    # 2. Validate and sanitize coupon code
+    clean_code = (payment_data.coupon_code or "").strip().upper()
+    if not COUPON_CODE_REGEX.match(clean_code):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Invalid or expired coupon.",
         )
 
-    subaccount_code = coupon.get("paystack_subaccount_code")
-    if not subaccount_code:
-        logger.error(f"Coupon {request.coupon_code} missing seller paystack_subaccount_code.")
+    coupon = coupon_service.get_coupon_by_code(clean_code)
+    if not coupon or not coupon.get("is_active"):
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Merchant settlement subaccount is not configured.",
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="This coupon is no longer valid",
         )
 
-    # 3. Server-side financial calculation (DO NOT trust client amounts)
+    # 3. Verify seller status and subaccount
+    seller_id = coupon.get("seller_id")
+    seller = seller_service.get_seller_by_id(seller_id) if seller_id else None
+    if seller and not seller.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="This coupon is no longer valid",
+        )
+
+    subaccount_code = coupon.get("paystack_subaccount_code") or (seller.paystack_subaccount_code if seller else None)
+    if not subaccount_code:
+        logger.error(f"Coupon {clean_code} missing seller paystack_subaccount_code.")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Seller is not configured for payments.",
+        )
+
+    # 4. Validate customer email format if provided
+    customer_email: str
+    if payment_data.email and payment_data.email.strip():
+        clean_email = payment_data.email.strip()
+        if not EMAIL_REGEX.match(clean_email):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid email address format.",
+            )
+        customer_email = clean_email
+    else:
+        customer_email = "noreply@incpay.app"
+
+    # 5. Server-side financial calculation (DO NOT trust client amounts)
     raw_d = coupon.get("agreed_discount") or "0.00"
     agreed_d = Decimal(str(raw_d))
-    # Customer gets D/2 discount: listed_amount * (D / 200)
-    customer_discount_amount = round(request.listed_amount * (agreed_d / Decimal("200.00")), 2)
-    amount_paid = request.listed_amount - customer_discount_amount
+    customer_discount_amount = (listed_amount * (agreed_d / Decimal("200.00"))).quantize(
+        Decimal("0.01"), rounding=ROUND_HALF_UP
+    )
+    amount_paid = (listed_amount - customer_discount_amount).quantize(
+        Decimal("0.01"), rounding=ROUND_HALF_UP
+    )
 
     if amount_paid <= Decimal("0.00"):
         raise HTTPException(
@@ -130,25 +206,22 @@ def initialize_payment(request: PaymentInitializeRequest) -> PaymentInitializeRe
             detail="Payable amount must be greater than zero.",
         )
 
-    # 4. Email validation & fallback
-    email = request.email.strip() if request.email and "@" in request.email else "noreply@incpay.app"
-
-    # 5. Unique reference
+    # 6. Generate cryptographically unique reference
     reference = f"INCPAY-{uuid4().hex.upper()}"
 
     metadata = {
-        "coupon_code": coupon.get("code"),
-        "seller_id": str(coupon.get("seller_id", "")),
+        "coupon_code": clean_code,
+        "seller_id": str(seller_id or ""),
         "business_name": coupon.get("business_name"),
-        "listed_amount": float(request.listed_amount),
+        "listed_amount": float(listed_amount),
         "customer_discount_amount": float(customer_discount_amount),
         "amount_paid": float(amount_paid),
     }
 
-    # 6. Initialize Paystack split transaction
+    # 7. Initialize Paystack split transaction
     try:
         tx_data = paystack_service.initialize_transaction(
-            email=email,
+            email=customer_email,
             amount_ghs=amount_paid,
             reference=reference,
             subaccount_code=subaccount_code,
@@ -164,21 +237,34 @@ def initialize_payment(request: PaymentInitializeRequest) -> PaymentInitializeRe
             access_code=access_code,
             reference=returned_ref,
             amount_paid=float(amount_paid),
-            listed_amount=float(request.listed_amount),
+            listed_amount=float(listed_amount),
             discount_amount=float(customer_discount_amount),
         )
 
     except PaystackError as exc:
-        logger.error(f"Paystack transaction initialization failed: {exc}")
+        logger.error(f"Paystack transaction initialization failed for ref '{reference}': {exc}")
+        log_service.log_event(
+            event="payment_initialization_failed",
+            payload={
+                "error": str(exc),
+                "message": exc.message,
+                "reference": reference,
+                "coupon_code": clean_code,
+            },
+        )
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Payment initialization failed: {exc.message}",
+            detail="Payment initialization failed. Please verify merchant details or try again.",
         )
     except Exception as exc:
         logger.error(f"Unexpected error initializing payment: {exc}")
+        log_service.log_event(
+            event="payment_initialization_failed",
+            payload={"error": str(exc), "reference": reference, "coupon_code": clean_code},
+        )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error initializing payment: {str(exc)}",
+            detail="Error initializing payment checkout.",
         )
 
 
@@ -195,18 +281,26 @@ class PaymentVerifyResponse(BaseModel):
     response_model=PaymentVerifyResponse,
     summary="Verify payment reference with Paystack",
 )
-def verify_payment(reference: str) -> PaymentVerifyResponse:
+@limiter.limit("60/minute")
+def verify_payment(request: Request, reference: str) -> PaymentVerifyResponse:
     """
     Public endpoint to verify payment status with Paystack by reference.
     Used by customer checkout success screen to confirm settlement.
     Does NOT leak merchant credentials, margin splits, or subaccounts.
     """
+    sanitized_ref = (reference or "").strip()
+    if not REFERENCE_REGEX.match(sanitized_ref):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid payment reference format.",
+        )
+
     try:
-        data = paystack_service.verify_transaction(reference)
+        data = paystack_service.verify_transaction(sanitized_ref)
         status_val = data.get("status", "unknown")
         amount_pesewas = data.get("amount", 0)
         amount_paid = round(float(amount_pesewas) / 100.0, 2)
-        ref_val = data.get("reference", reference)
+        ref_val = data.get("reference", sanitized_ref)
 
         customer = data.get("customer") or {}
         cust_email = customer.get("email")
@@ -220,9 +314,9 @@ def verify_payment(reference: str) -> PaymentVerifyResponse:
             customer_email=cust_email,
         )
     except PaystackError as exc:
-        logger.warning(f"Paystack verification error for reference '{reference}': {exc}")
+        logger.warning(f"Paystack verification error for reference '{sanitized_ref}': {exc}")
         # Check if transaction was already logged/persisted in database
-        tx = transaction_service.get_transaction_by_reference(reference)
+        tx = transaction_service.get_transaction_by_reference(sanitized_ref)
         if tx:
             c_email = tx.customer_email
             if c_email and c_email.lower() == "noreply@incpay.app":
@@ -235,10 +329,10 @@ def verify_payment(reference: str) -> PaymentVerifyResponse:
             )
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Transaction reference '{reference}' not found.",
+            detail=f"Transaction reference '{sanitized_ref}' not found.",
         )
     except Exception as exc:
-        logger.error(f"Unexpected error verifying reference '{reference}': {exc}")
+        logger.error(f"Unexpected error verifying reference '{sanitized_ref}': {exc}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Error verifying payment transaction.",
@@ -250,15 +344,16 @@ def verify_payment(reference: str) -> PaymentVerifyResponse:
     summary="Download payment receipt PDF",
     response_class=Response,
 )
-def download_receipt(reference: str) -> Response:
+@limiter.limit("10/minute")
+def download_receipt(request: Request, reference: str) -> Response:
     """
     Public endpoint to view or download an official PDF payment receipt.
     No authentication required.
     Only confirmed, successful transactions can generate receipts.
     Sensitive merchant credentials or platform cut details are never exposed.
     """
-    sanitized_ref = reference.strip()
-    if not sanitized_ref or len(sanitized_ref) > 100:
+    sanitized_ref = (reference or "").strip()
+    if not REFERENCE_REGEX.match(sanitized_ref):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Invalid payment reference format.",
@@ -298,6 +393,10 @@ def download_receipt(reference: str) -> Response:
         pdf_bytes = receipt_service.generate_receipt_pdf(tx_dict, seller_dict)
     except Exception as exc:
         logger.error(f"Failed to generate receipt PDF for ref '{sanitized_ref}': {exc}", exc_info=True)
+        log_service.log_event(
+            event="pdf_generation_failed",
+            payload={"error": str(exc), "reference": sanitized_ref},
+        )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Error generating payment receipt PDF.",
@@ -312,5 +411,3 @@ def download_receipt(reference: str) -> Response:
             "Content-Type": "application/pdf",
         },
     )
-
-

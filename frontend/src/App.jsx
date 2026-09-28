@@ -15,8 +15,10 @@ export default function App() {
   return (
     <BrowserRouter>
       <Routes>
-        <Route path="/" element={<Home />} />
+        {/* Landing Page: Admin Login */}
+        <Route path="/" element={<Login />} />
         <Route path="/login" element={<Login />} />
+        <Route path="/status" element={<Home />} />
 
         {/* Public Customer Payment Routes */}
         <Route path="/pay/:couponCode" element={<Pay />} />

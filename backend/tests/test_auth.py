@@ -27,7 +27,7 @@ class TestAuthEndpoints(unittest.TestCase):
                 headers={"Authorization": "Bearer bad_token"},
             )
             self.assertEqual(response.status_code, 401)
-            self.assertEqual(response.json(), {"detail": "Not authenticated"})
+            self.assertEqual(response.json(), {"detail": "Session expired, please log in again."})
 
     def test_auth_me_valid_token_mocked(self):
         """Request with valid token returns user id and email."""

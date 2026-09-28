@@ -146,7 +146,7 @@ class TestPublicPayments(unittest.TestCase):
         }
         response = self.client.post("/api/public/initialize-payment", json=payload)
         self.assertEqual(response.status_code, 400)
-        self.assertIn("subaccount is not configured", response.json()["detail"])
+        self.assertIn("Seller is not configured for payments.", response.json()["detail"])
 
 
 if __name__ == "__main__":

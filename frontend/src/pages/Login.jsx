@@ -38,7 +38,8 @@ export default function Login() {
     <div className="min-h-screen flex items-center justify-center p-6 bg-gray-50 text-gray-900">
       <div className="w-full max-w-md bg-white border border-gray-200 rounded-lg p-8 shadow-sm">
         <div className="mb-6 text-center">
-          <h1 className="text-2xl font-bold tracking-tight text-gray-900">IncPay Admin</h1>
+          <img src="/logo.png" alt="IncPay" className="h-9 w-auto mx-auto mb-4 object-contain" />
+          <h1 className="text-xl font-bold tracking-tight text-gray-900">Admin Portal</h1>
           <p className="text-sm text-gray-600 mt-1">
             Sign in with your administrator credentials
           </p>

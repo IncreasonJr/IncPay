@@ -202,8 +202,8 @@ export default function TransactionDetail() {
       <header className="bg-white border-b border-gray-200">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
           <div className="flex items-center space-x-8">
-            <div className="flex items-center space-x-2">
-              <span className="text-xl font-bold text-gray-900 tracking-tight">IncPay</span>
+            <div className="flex items-center space-x-3">
+              <img src="/logo.png" alt="IncPay" className="h-7 w-auto object-contain" />
               <span className="text-xs bg-gray-100 text-gray-700 px-2 py-0.5 rounded font-medium">
                 Admin
               </span>

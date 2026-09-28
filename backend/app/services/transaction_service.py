@@ -236,6 +236,18 @@ def create_transaction_from_webhook(data: Dict[str, Any]) -> Dict[str, Any]:
         log_service.log_event(event=raw_event or "webhook_missing_reference", payload=data)
         return {}
 
+    # 0. Check for refund events
+    if raw_event.startswith("refund.") or raw_event == "refund.processed":
+        logger.info(f"Received refund webhook event '{raw_event}' for ref '{reference}'")
+        existing_tx = get_transaction_by_reference(reference) if reference else None
+        tx_id = existing_tx.id if existing_tx else None
+        log_service.log_event(
+            event=raw_event,
+            transaction_id=tx_id,
+            payload=data,
+        )
+        return existing_tx.model_dump() if existing_tx else {"status": "refund_logged"}
+
     # 1. Determine target transaction status
     status_str = str(tx_payload.get("status") or "").lower()
     if raw_event == "charge.failed" or status_str == "failed":
@@ -248,6 +260,30 @@ def create_transaction_from_webhook(data: Dict[str, Any]) -> Dict[str, Any]:
     # 2. Check for existing transaction (Idempotency + Reconciliation)
     existing_tx = get_transaction_by_reference(reference)
     if existing_tx:
+        # Check for payment amount discrepancy
+        amount_pesewas = tx_payload.get("amount", 0)
+        quantize_cents = Decimal("0.01")
+        amount_paid_ghs = (Decimal(str(amount_pesewas)) / Decimal("100.00")).quantize(
+            quantize_cents, rounding=ROUND_HALF_UP
+        )
+        expected_ghs = Decimal(str(existing_tx.amount_paid)).quantize(quantize_cents, rounding=ROUND_HALF_UP)
+        if abs(amount_paid_ghs - expected_ghs) > Decimal("0.02"):
+            logger.warning(
+                f"Payment amount discrepancy for ref '{reference}': webhook received {amount_paid_ghs} GHS, "
+                f"expected {expected_ghs} GHS"
+            )
+            log_service.log_event(
+                event="payment_amount_discrepancy",
+                transaction_id=existing_tx.id,
+                payload={
+                    "expected_amount": str(expected_ghs),
+                    "received_amount": str(amount_paid_ghs),
+                    "raw_amount_pesewas": amount_pesewas,
+                    "reference": reference,
+                },
+            )
+            return existing_tx.model_dump()
+
         # Always insert an audit record into transaction_logs
         log_service.log_event(
             event=raw_event or f"webhook_{target_status.value}",
@@ -355,6 +391,28 @@ def create_transaction_from_webhook(data: Dict[str, Any]) -> Dict[str, Any]:
         amount_paid_ghs = Decimal("1.00")
 
     d = agreed_discount
+
+    # Check amount discrepancy against metadata if provided during initialization
+    meta_amount_paid = metadata.get("amount_paid")
+    if meta_amount_paid is not None:
+        try:
+            expected_from_meta = Decimal(str(meta_amount_paid)).quantize(quantize_cents, rounding=ROUND_HALF_UP)
+            if abs(amount_paid_ghs - expected_from_meta) > Decimal("0.02"):
+                logger.warning(
+                    f"Payment amount discrepancy for ref '{reference}': webhook received {amount_paid_ghs} GHS, "
+                    f"metadata expected {expected_from_meta} GHS"
+                )
+                log_service.log_event(
+                    event="payment_amount_discrepancy",
+                    payload={
+                        "expected_amount": str(expected_from_meta),
+                        "received_amount": str(amount_paid_ghs),
+                        "raw_amount_pesewas": amount_pesewas,
+                        "reference": reference,
+                    },
+                )
+        except Exception:
+            pass
 
     # Derive listed_amount from amount_paid: A_listed = A_paid * 200 / (200 - D)
     meta_listed = metadata.get("listed_amount")

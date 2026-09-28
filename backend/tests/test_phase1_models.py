@@ -154,7 +154,10 @@ class TestPhase1DataLayer(unittest.TestCase):
         self.assertIsNone(log.transaction_id)
         self.assertEqual(log.payload["currency"], "GHS")
 
-    def test_services_unconfigured_client_graceful_handling(self):
+    from unittest.mock import patch
+
+    @patch("app.database.get_supabase_client", return_value=None)
+    def test_services_unconfigured_client_graceful_handling(self, _mock_db):
         """Verify that services handle unconfigured/unreachable client gracefully without exceptions."""
         dummy_id = uuid4()
 

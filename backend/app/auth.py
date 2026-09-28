@@ -41,7 +41,7 @@ def verify_admin(
         if not response or not response.user:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Not authenticated",
+                detail="Session expired, please log in again.",
                 headers={"WWW-Authenticate": "Bearer"},
             )
         return response.user
@@ -51,6 +51,6 @@ def verify_admin(
         logger.warning(f"Failed to authenticate token with Supabase: {exc}")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Not authenticated",
+            detail="Session expired, please log in again.",
             headers={"WWW-Authenticate": "Bearer"},
         )

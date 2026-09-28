@@ -31,6 +31,13 @@ async def paystack_webhook(
     raw_body = await request.body()
     if not paystack_service.verify_webhook_signature(raw_body, x_paystack_signature):
         logger.warning("Rejected Paystack webhook: invalid or missing signature.")
+        log_service.log_event(
+            event="webhook_invalid_signature",
+            payload={
+                "ip": request.client.host if request.client else "unknown",
+                "signature": x_paystack_signature,
+            },
+        )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid signature",
@@ -54,7 +61,7 @@ async def paystack_webhook(
 
     # 3. Process event & record transaction
     try:
-        if event in ("charge.success", "charge.failed"):
+        if event in ("charge.success", "charge.failed") or event.startswith("refund."):
             transaction_service.create_transaction_from_webhook(payload)
         else:
             # Audit any other non-charge events sent by Paystack

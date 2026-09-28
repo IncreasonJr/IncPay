@@ -108,4 +108,44 @@ Ngrok provides a public forwarding URL such as `https://abcdef123.ngrok-free.app
 Ensure the following events are enabled to receive payment notifications:
 - `charge.success`: Triggered when customer completes payment and split settlement succeeds.
 - `charge.failed`: Triggered when customer transaction fails or is declined.
+- `refund.processed`: Audit-logged without mutating underlying transaction.
+
+---
+
+## Security Hardening & Rate Limiting
+
+IncPay enforces production-grade security standards and rate limiting on all public endpoints via `slowapi`:
+
+| Endpoint | Rate Limit | Purpose |
+| :--- | :--- | :--- |
+| `GET /api/public/coupon/{code}` | 30 / min | Prevents coupon code enumeration and scraping |
+| `POST /api/public/initialize-payment` | 10 / min | Prevents checkout initialization abuse |
+| `GET /api/public/verify-payment/{reference}` | 60 / min | Allows rapid client polling upon redirect |
+| `GET /api/public/receipt/{reference}` | 10 / min | Protects in-memory PDF rendering from DoS |
+
+### Payment Amount Bounds
+- **Minimum listed amount**: `MIN_PAYMENT_AMOUNT = 1.0` (₵1.00)
+- **Maximum listed amount**: `MAX_PAYMENT_AMOUNT = 50000.0` (₵50,000.00)
+- Amounts are strictly validated as `Decimal` and quantized to 2 decimal places using `ROUND_HALF_UP`.
+
+### Security Headers & Data Leakage Prevention
+- **Security Headers**: Injected across all responses (`X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: strict-origin-when-cross-origin`, and `HSTS` in production).
+- **Public Data Isolation**: Public endpoints sanitize responses to guarantee no seller bank account, phone number, contact email, subaccount ID, platform revenue cut, or internal database UUIDs are leaked.
+- **HMAC Constant-Time Verification**: Webhook signatures are compared via `hmac.compare_digest` to prevent timing attacks.
+
+---
+
+## Running Automated Tests
+
+Run the complete test suite (82 passing tests covering edge cases, security, and the full E2E lifecycle):
+
+```bash
+# Run all unit, edge case, and end-to-end tests
+.venv/bin/python3 -m unittest discover -s tests -v
+
+# Run specific test suites
+.venv/bin/python3 -m unittest tests/test_edge_cases_security.py -v
+.venv/bin/python3 -m unittest tests/test_end_to_end.py -v
+```
+
 

@@ -1,5 +1,6 @@
 import io
 import logging
+import os
 from datetime import datetime
 from decimal import Decimal
 from typing import Any, Dict, Optional
@@ -10,6 +11,7 @@ from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import inch
 from reportlab.platypus import (
     HRFlowable,
+    Image as RLImage,
     Paragraph,
     SimpleDocTemplate,
     Spacer,
@@ -195,10 +197,18 @@ def generate_receipt_pdf(transaction: Dict[str, Any], seller: Dict[str, Any]) ->
     story = []
 
     # 1. Header: Logo / Brand and Receipt Title
+    logo_path = os.path.abspath(
+        os.path.join(os.path.dirname(__file__), "../../../images/logo-full.png")
+    )
+    if os.path.exists(logo_path):
+        brand_flowable = RLImage(logo_path, width=1.5 * inch, height=0.326 * inch)
+    else:
+        brand_flowable = Paragraph("<b>IncPay</b>", brand_style)
+
     header_table = Table(
         [
             [
-                Paragraph("<b>IncPay</b>", brand_style),
+                brand_flowable,
                 Paragraph("PAYMENT RECEIPT", receipt_title),
             ],
             [

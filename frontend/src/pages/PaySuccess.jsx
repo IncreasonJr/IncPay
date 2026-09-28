@@ -76,6 +76,9 @@ export default function PaySuccess() {
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col justify-between py-12 px-4 sm:px-6">
       <div className="max-w-md w-full mx-auto my-auto">
+        <div className="flex justify-center mb-6">
+          <img src="/logo.png" alt="IncPay" className="h-8 w-auto object-contain" />
+        </div>
         <div className="bg-white rounded-2xl shadow-md border border-gray-200 p-8 text-center">
           {/* 1. Loading State */}
           {loading && (

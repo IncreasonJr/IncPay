@@ -26,6 +26,9 @@ class Settings(BaseSettings):
     # Minimum payment listed amount in GHS (₵)
     MIN_PAYMENT_AMOUNT: float = 1.0
 
+    # Maximum payment listed amount in GHS (₵) to prevent integer overflows or abuse
+    MAX_PAYMENT_AMOUNT: float = 50000.0
+
     # Environment
     ENVIRONMENT: str = "development"
 
@@ -36,7 +39,20 @@ class Settings(BaseSettings):
     )
 
 
+def check_critical_settings(settings: Settings) -> list[str]:
+    """Audit critical environment variables and return list of warnings."""
+    warnings = []
+    if not settings.SUPABASE_URL or "your-project" in settings.SUPABASE_URL:
+        warnings.append("SUPABASE_URL is missing or using placeholder.")
+    if not settings.SUPABASE_KEY or "your-anon-key" in settings.SUPABASE_KEY:
+        warnings.append("SUPABASE_KEY is missing or using placeholder.")
+    if not settings.PAYSTACK_SECRET_KEY or "sk_test_xxx" in settings.PAYSTACK_SECRET_KEY:
+        warnings.append("PAYSTACK_SECRET_KEY is missing or using placeholder.")
+    return warnings
+
+
 @lru_cache()
 def get_settings() -> Settings:
     """Return a cached instance of application settings."""
     return Settings()
+
