@@ -148,4 +148,52 @@ Run the complete test suite (82 passing tests covering edge cases, security, and
 .venv/bin/python3 -m unittest tests/test_end_to_end.py -v
 ```
 
+---
+
+## Production Deployment (Render)
+
+The IncPay backend is pre-configured for automated deployment to [Render](https://render.com) using the included `Procfile` and `render.yaml`.
+
+### 1. Deployment Steps
+1. Log into your Render dashboard and click **New +** → **Web Service**.
+2. Select your repository.
+3. Configure the service:
+   - **Root Directory**: `backend`
+   - **Runtime**: `Python 3`
+   - **Build Command**: `pip install -r requirements.txt`
+   - **Start Command**: `uvicorn app.main:app --host 0.0.0.0 --port $PORT`
+   - **Health Check Path**: `/health`
+
+### 2. Required Production Environment Variables
+Configure these under **Environment** in the Render Dashboard:
+- `SUPABASE_URL`: Production Supabase project URL
+- `SUPABASE_KEY`: Production Supabase `service_role` key
+- `PAYSTACK_SECRET_KEY`: Live Paystack secret key (`sk_live_...`)
+- `PAYSTACK_PUBLIC_KEY`: Live Paystack public key (`pk_live_...`)
+- `FRONTEND_URL`: URL of the deployed Vercel frontend (e.g. `https://incpay.vercel.app`)
+- `PAYMENT_PAGE_BASE_URL`: Public checkout URL base (e.g. `https://incpay.vercel.app`)
+- `ENVIRONMENT`: `production`
+- `RESEND_API_KEY`: Production Resend API key
+- `RESEND_FROM_EMAIL`: Verified sender domain email or `onboarding@resend.dev`
+- `MIN_PAYMENT_AMOUNT`: `1.0`
+- `MAX_PAYMENT_AMOUNT`: `50000.0`
+
+### 3. Health Checks
+- Fast liveness probe: `GET https://your-render-url.onrender.com/health` (returns `{"status":"ok"}`)
+- Supabase database connectivity probe: `GET https://your-render-url.onrender.com/api/health/db`
+
+### 4. Test Data Purge Tool
+Before going live with commercial payments, purge all test data from Supabase:
+```bash
+python3 backend/scripts/purge_test_data.py
+```
+Type `PURGE ALL` when prompted. Deletes records from `transaction_logs`, `transactions`, `coupons`, and `sellers` in foreign-key safe order while leaving Admin Auth users intact.
+
+### 5. Production Logging Guidelines
+To maintain data privacy and compliance:
+- **Never log secrets or API keys**: `PAYSTACK_SECRET_KEY`, `SUPABASE_KEY`, and `RESEND_API_KEY` must never appear in log statements.
+- **Never log raw customer PII at INFO level**: In webhooks, log only transaction references and event types (e.g. `charge.success (ref: INCPAY-XXXX)`). Do not log customer emails, names, or authorization tokens.
+- **Audit Logging**: Sensitive operational audit events must be stored in the encrypted `transaction_logs` Supabase table rather than standard console stdout.
+
+
 

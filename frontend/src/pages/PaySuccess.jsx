@@ -12,9 +12,7 @@ export default function PaySuccess() {
   const [customerEmail, setCustomerEmail] = useState(null);
   const [copied, setCopied] = useState(false);
 
-  const baseURL =
-    (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_API_URL) ||
-    'http://localhost:8000';
+  const baseURL = import.meta.env.VITE_API_URL || '';
 
   const verifyPayment = useCallback(async () => {
     if (!reference || reference === '—') {

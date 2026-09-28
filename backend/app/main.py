@@ -34,27 +34,30 @@ async def add_security_headers(request: Request, call_next):
     return response
 
 
-# Strict CORS origin parsing: exclude wildcards from credentialed origins
-allowed_origins = [
-    origin.strip()
-    for origin in settings.FRONTEND_URL.split(",")
-    if origin.strip() and origin.strip() != "*"
-]
-if not allowed_origins:
-    allowed_origins = ["http://localhost:5173"]
-
+# Strict CORS origin parsing: supports multiple comma-separated origins
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=allowed_origins,
+    allow_origins=settings.get_cors_origins(),
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["*"],
 )
 
 
-# Startup audit check for critical credentials
+# Startup audit check for critical credentials and environment configuration
 @app.on_event("startup")
 def on_startup():
+    logger.info(f"IncPay API starting up. ENVIRONMENT='{settings.ENVIRONMENT}'")
+    configured_vars = [
+        k for k in [
+            "SUPABASE_URL", "SUPABASE_KEY", "PAYSTACK_SECRET_KEY", "PAYSTACK_PUBLIC_KEY",
+            "FRONTEND_URL", "PAYMENT_PAGE_BASE_URL", "ENVIRONMENT", "MIN_PAYMENT_AMOUNT",
+            "MAX_PAYMENT_AMOUNT", "RESEND_API_KEY", "RESEND_FROM_EMAIL",
+        ]
+        if getattr(settings, k, None)
+    ]
+    logger.info(f"Configured environment variables: {', '.join(configured_vars)}")
+
     warnings = check_critical_settings(settings)
     for warning in warnings:
         logger.warning(f"[SECURITY WARNING] {warning}")

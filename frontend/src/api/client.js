@@ -1,9 +1,7 @@
 import axios from 'axios';
 import { supabase } from './supabase';
 
-const baseURL =
-  (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_API_URL) ||
-  'http://localhost:8000';
+const baseURL = import.meta.env.VITE_API_URL || '';
 
 const client = axios.create({
   baseURL,

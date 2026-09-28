@@ -32,6 +32,15 @@ class Settings(BaseSettings):
     # Environment
     ENVIRONMENT: str = "development"
 
+    def get_cors_origins(self) -> list[str]:
+        """Split FRONTEND_URL by commas, trim whitespace, and filter empty strings and wildcards."""
+        origins = [
+            origin.strip()
+            for origin in self.FRONTEND_URL.split(",")
+            if origin.strip() and origin.strip() != "*"
+        ]
+        return origins or ["http://localhost:5173"]
+
     model_config = SettingsConfigDict(
         env_file=(".env", "backend/.env"),
         env_file_encoding="utf-8",
@@ -48,6 +57,11 @@ def check_critical_settings(settings: Settings) -> list[str]:
         warnings.append("SUPABASE_KEY is missing or using placeholder.")
     if not settings.PAYSTACK_SECRET_KEY or "sk_test_xxx" in settings.PAYSTACK_SECRET_KEY:
         warnings.append("PAYSTACK_SECRET_KEY is missing or using placeholder.")
+    if settings.PAYSTACK_SECRET_KEY.startswith("sk_live_") and settings.ENVIRONMENT.lower() != "production":
+        warnings.append(
+            f"PAYSTACK_SECRET_KEY appears to be a live key ('sk_live_...'), but ENVIRONMENT is set to '{settings.ENVIRONMENT}'! "
+            "Ensure ENVIRONMENT=production when deploying with live credentials."
+        )
     return warnings
 
 
