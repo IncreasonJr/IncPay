@@ -125,26 +125,26 @@ export default function QrModal({ seller, onClose }) {
 
   return (
     <div
-      className="fixed inset-0 z-50 overflow-y-auto bg-black bg-opacity-50 flex items-center justify-center p-4"
+      className="fixed inset-0 z-50 overflow-y-auto bg-black/60 flex items-center justify-center p-3 sm:p-4 backdrop-blur-xs"
       onClick={onClose}
     >
       <div
-        className="bg-white rounded-xl shadow-xl max-w-lg w-full overflow-hidden transition-all transform"
+        className="bg-white rounded-2xl shadow-xl max-w-md w-full overflow-hidden transition-all transform my-auto"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
-          <div>
-            <h3 className="text-lg font-bold text-gray-900">
+        <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+          <div className="pr-2">
+            <h3 className="text-base sm:text-lg font-bold text-gray-900 truncate max-w-xs">
               {seller.business_name}
             </h3>
-            <p className="text-xs text-gray-500">
-              Merchant QR Code & Checkout Destination
+            <p className="text-[11px] text-gray-500">
+              Merchant QR Code &amp; Checkout Destination
             </p>
           </div>
           <button
             onClick={onClose}
-            className="text-gray-400 hover:text-gray-600 rounded-lg p-1 hover:bg-gray-100 transition-colors"
+            className="text-gray-400 hover:text-gray-600 rounded-lg p-1.5 hover:bg-gray-100 transition-colors shrink-0"
           >
             <span className="sr-only">Close</span>
             ✕
@@ -152,22 +152,22 @@ export default function QrModal({ seller, onClose }) {
         </div>
 
         {/* Body */}
-        <div className="p-6">
+        <div className="p-5 sm:p-6">
           {error && (
-            <div className="mb-4 p-3 rounded-md bg-red-50 border border-red-200 text-xs text-red-700">
+            <div className="mb-4 p-3 rounded-lg bg-red-50 border border-red-200 text-xs text-red-700">
               {error}
             </div>
           )}
 
           {loading ? (
-            <div className="py-16 text-center text-sm text-gray-500">
+            <div className="py-12 text-center text-sm text-gray-500">
               <div className="inline-block w-8 h-8 border-2 border-gray-900 border-t-transparent rounded-full animate-spin mb-3"></div>
-              <p>Generating high-resolution QR code...</p>
+              <p className="text-xs">Generating high-resolution QR code...</p>
             </div>
           ) : (
             <div className="flex flex-col items-center">
               {/* QR Image Frame */}
-              <div className="w-64 h-64 bg-white p-3 border-2 border-gray-200 rounded-xl shadow-sm flex items-center justify-center mb-6">
+              <div className="w-48 h-48 sm:w-60 sm:h-60 max-w-full bg-white p-3 border-2 border-gray-200 rounded-xl shadow-xs flex items-center justify-center mb-5">
                 {qrBlobUrl ? (
                   <img
                     src={qrBlobUrl}
@@ -180,17 +180,17 @@ export default function QrModal({ seller, onClose }) {
               </div>
 
               {/* Coupon Code Pill */}
-              <div className="w-full mb-4">
-                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
+              <div className="w-full mb-3.5">
+                <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1">
                   Unique Coupon Code
                 </label>
-                <div className="flex items-center justify-between bg-gray-50 border border-gray-200 rounded-lg px-4 py-2.5">
-                  <span className="font-mono text-base font-bold text-gray-900 tracking-wide">
+                <div className="flex items-center justify-between bg-gray-50 border border-gray-200 rounded-lg px-3.5 py-2">
+                  <span className="font-mono text-sm sm:text-base font-bold text-gray-900 tracking-wide">
                     {couponData?.code || '—'}
                   </span>
                   <button
                     onClick={handleCopyCode}
-                    className="text-xs font-medium px-2.5 py-1 bg-white border border-gray-200 rounded hover:bg-gray-100 text-gray-700 transition-colors"
+                    className="text-xs font-semibold px-2.5 py-1 bg-white border border-gray-200 rounded hover:bg-gray-100 text-gray-700 transition-colors shadow-xs"
                   >
                     {copiedCode ? '✓ Copied' : 'Copy'}
                   </button>
@@ -198,8 +198,8 @@ export default function QrModal({ seller, onClose }) {
               </div>
 
               {/* Payment URL Pill */}
-              <div className="w-full mb-6">
-                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
+              <div className="w-full mb-5">
+                <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1">
                   Payment Destination URL
                 </label>
                 <div className="flex items-center justify-between bg-gray-50 border border-gray-200 rounded-lg px-3 py-2">
@@ -208,7 +208,7 @@ export default function QrModal({ seller, onClose }) {
                   </span>
                   <button
                     onClick={handleCopyUrl}
-                    className="text-xs font-medium px-2.5 py-1 bg-white border border-gray-200 rounded hover:bg-gray-100 text-gray-700 shrink-0 transition-colors"
+                    className="text-xs font-semibold px-2.5 py-1 bg-white border border-gray-200 rounded hover:bg-gray-100 text-gray-700 shrink-0 transition-colors shadow-xs"
                   >
                     {copiedUrl ? '✓ Copied' : 'Copy'}
                   </button>
@@ -216,18 +216,18 @@ export default function QrModal({ seller, onClose }) {
               </div>
 
               {/* Action Buttons */}
-              <div className="w-full grid grid-cols-2 gap-3 mb-3">
+              <div className="w-full grid grid-cols-2 gap-2.5 mb-3">
                 <button
                   onClick={() => handleDownload('png')}
                   disabled={downloadingFormat === 'png'}
-                  className="w-full py-2 px-3 bg-gray-900 hover:bg-gray-800 text-white text-xs font-semibold rounded-md shadow-sm transition-colors text-center"
+                  className="w-full py-2.5 px-3 bg-gray-900 hover:bg-gray-800 text-white text-xs font-semibold rounded-lg shadow-xs transition-colors text-center"
                 >
                   {downloadingFormat === 'png' ? 'Preparing PNG...' : 'Download PNG'}
                 </button>
                 <button
                   onClick={() => handleDownload('svg')}
                   disabled={downloadingFormat === 'svg'}
-                  className="w-full py-2 px-3 bg-white border border-gray-300 hover:bg-gray-50 text-gray-800 text-xs font-semibold rounded-md shadow-sm transition-colors text-center"
+                  className="w-full py-2.5 px-3 bg-white border border-gray-300 hover:bg-gray-50 text-gray-800 text-xs font-semibold rounded-lg shadow-xs transition-colors text-center"
                 >
                   {downloadingFormat === 'svg' ? 'Preparing SVG...' : 'Download SVG'}
                 </button>
@@ -237,7 +237,7 @@ export default function QrModal({ seller, onClose }) {
               <button
                 onClick={handleRegenerate}
                 disabled={regenerating}
-                className="text-xs text-red-600 hover:text-red-700 font-medium py-1 transition-colors"
+                className="text-xs text-rose-600 hover:text-rose-700 font-semibold py-1 transition-colors"
               >
                 {regenerating ? 'Regenerating Coupon...' : '↻ Regenerate Coupon Code'}
               </button>

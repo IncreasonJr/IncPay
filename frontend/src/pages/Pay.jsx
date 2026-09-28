@@ -136,10 +136,10 @@ export default function Pay() {
 
   // Render Active Checkout Form
   return (
-    <div className="min-h-screen bg-gradient-to-b from-gray-50 to-gray-100 flex flex-col justify-between py-12 px-4 sm:px-6">
+    <div className="min-h-screen bg-gradient-to-b from-gray-50 to-gray-100 flex flex-col justify-between py-6 sm:py-12 px-3 sm:px-6">
       <div className="max-w-md w-full mx-auto">
         {/* IncPay Platform Top Bar */}
-        <div className="flex flex-col items-center mb-6">
+        <div className="flex flex-col items-center mb-5 sm:mb-6">
           <img src="/logo.png" alt="IncPay" className="h-8 w-auto object-contain mb-1.5" />
           <span className="text-[11px] uppercase tracking-widest font-semibold text-gray-400">
             Payment Bridge
@@ -149,11 +149,11 @@ export default function Pay() {
         {/* Payment Card */}
         <div className="bg-white rounded-2xl shadow-md border border-gray-200 overflow-hidden">
           {/* Card Header: Merchant Info */}
-          <div className="bg-gray-900 text-white p-6 text-center">
+          <div className="bg-gray-900 text-white p-5 sm:p-6 text-center">
             <span className="text-xs uppercase font-semibold tracking-wider text-gray-400 block mb-1">
               Paying Merchant
             </span>
-            <h1 className="text-2xl font-bold tracking-tight">
+            <h1 className="text-xl sm:text-2xl font-bold tracking-tight">
               {coupon?.business_name}
             </h1>
             <div className="mt-3 inline-flex items-center gap-1.5 px-3 py-1 bg-green-500/20 text-green-300 border border-green-500/30 rounded-full text-xs font-semibold">
@@ -163,7 +163,7 @@ export default function Pay() {
           </div>
 
           {/* Card Body */}
-          <form onSubmit={handlePayment} className="p-6 space-y-6">
+          <form onSubmit={handlePayment} className="p-5 sm:p-6 space-y-5 sm:space-y-6">
             {/* Feedback Notifications */}
             {paymentError && (
               <div className="p-3.5 bg-red-50 border border-red-200 text-red-700 text-xs rounded-lg">
@@ -217,7 +217,7 @@ export default function Pay() {
                 placeholder="your-name@example.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="w-full px-3.5 py-2.5 border border-gray-300 rounded-lg text-sm text-gray-900 placeholder-gray-400 focus:ring-2 focus:ring-gray-900 focus:border-gray-900"
+                className="w-full px-3.5 py-2.5 border border-gray-300 rounded-lg text-base sm:text-sm text-gray-900 placeholder-gray-400 focus:ring-2 focus:ring-gray-900 focus:border-gray-900"
               />
               <p className="text-xs text-gray-400 mt-1">
                 We'll email you a payment receipt and confirmation.

@@ -50,8 +50,8 @@ Under the **Environment** tab on Render, add the following variables:
 | `SUPABASE_KEY` | Your Supabase `service_role` secret key | **YES** |
 | `PAYSTACK_SECRET_KEY` | Your Paystack **Live** secret key (`sk_live_...`) | **YES** |
 | `PAYSTACK_PUBLIC_KEY` | Your Paystack **Live** public key (`pk_live_...`) | **YES** |
-| `FRONTEND_URL` | `https://incpay.vercel.app` (or your initial custom domain) | No |
-| `PAYMENT_PAGE_BASE_URL`| `https://incpay.vercel.app` | No |
+| `FRONTEND_URL` | `https://inc-pay.vercel.app` | No |
+| `PAYMENT_PAGE_BASE_URL`| `https://inc-pay.vercel.app` | No |
 | `ENVIRONMENT` | `production` | No |
 | `MIN_PAYMENT_AMOUNT` | `1.0` | No |
 | `MAX_PAYMENT_AMOUNT` | `50000.0` | No |
@@ -60,8 +60,8 @@ Under the **Environment** tab on Render, add the following variables:
 
 5. Click **Create Web Service**.
 6. Wait for the build and deployment to complete.
-7. Note your public backend URL: `https://incpay-backend.onrender.com`.
-8. Verify in your browser: `https://incpay-backend.onrender.com/health` returns `{"status":"ok"}`.
+7. Note your public backend URL: `https://incpay.onrender.com`.
+8. Verify in your browser: `https://incpay.onrender.com/health` returns `{"status":"ok"}`.
 
 ---
 
@@ -72,7 +72,7 @@ Under the **Environment** tab on Render, add the following variables:
 2. Click **Add New...** → **Project**.
 3. Import the same GitHub repository.
 4. Configure project settings:
-   - **Project Name**: `incpay`
+   - **Project Name**: `inc-pay`
    - **Framework Preset**: `Vite`
    - **Root Directory**: Click *Edit* and select `frontend`.
    - **Build Command**: `npm run build`
@@ -84,21 +84,21 @@ Under **Environment Variables**, configure the 3 production variables:
 
 | Variable | Value | Description |
 | :--- | :--- | :--- |
-| `VITE_API_URL` | `https://incpay-backend.onrender.com` | Your live Render backend URL (no trailing slash) |
-| `VITE_SUPABASE_URL` | `https://xxxx.supabase.co` | Your live Supabase Project URL |
+| `VITE_API_URL` | `https://incpay.onrender.com` | Your live Render backend URL (no trailing slash) |
+| `VITE_SUPABASE_URL` | `https://whoptzwdpavxwmvnnjau.supabase.co` | Your live Supabase Project URL |
 | `VITE_SUPABASE_ANON_KEY` | `eyJhbG...` | Your Supabase public `anon` key |
 
 5. Click **Deploy**.
-6. Once deployed, note your Vercel URL: `https://incpay.vercel.app` (or your assigned Vercel subdomain).
+6. Once deployed, note your Vercel URL: `https://inc-pay.vercel.app`.
 
 ---
 
 ## 3. Post-Deployment Linking & Verification
 
 ### 3.1 Update Backend CORS & Base URLs
-1. In your Render Dashboard (`incpay-backend`):
-   - Set `FRONTEND_URL` = `https://incpay.vercel.app` (or include both staging and prod: `https://incpay.vercel.app,http://localhost:5173`).
-   - Set `PAYMENT_PAGE_BASE_URL` = `https://incpay.vercel.app`.
+1. In your Render Dashboard (`incpay`):
+   - Set `FRONTEND_URL` = `https://inc-pay.vercel.app`
+   - Set `PAYMENT_PAGE_BASE_URL` = `https://inc-pay.vercel.app`.
 2. Click **Save Changes** and allow Render to trigger an automated redeploy.
 
 ### 3.2 Configure Paystack Live Webhooks
@@ -107,7 +107,7 @@ Under **Environment Variables**, configure the 3 production variables:
 3. Navigate to **Settings** → **API Keys & Webhooks**.
 4. In the **Live Webhook URL** field, set:
    ```
-   https://incpay-backend.onrender.com/api/webhooks/paystack
+   https://incpay.onrender.com/api/webhooks/paystack
    ```
 5. Ensure the following events are enabled:
    - `charge.success`
@@ -123,12 +123,12 @@ Under **Environment Variables**, configure the 3 production variables:
 > - This provisions genuine live Paystack subaccounts (`ACCT_live_...`) with your commercial partner banks/MoMo telcos.
 
 ### 3.4 Full End-to-End Live Verification Test
-1. Log into your production Admin Dashboard at `https://incpay.vercel.app/admin/sellers`.
+1. Log into your production Admin Dashboard at `https://inc-pay.vercel.app/admin/sellers`.
 2. Create a live seller with genuine bank or mobile money account details (e.g. agreed discount 20%).
 3. Inspect the newly created seller:
    - Verify a live Paystack subaccount code was assigned.
    - Verify the generated coupon code and QR code.
-4. Scan the QR code with a mobile device or navigate to `https://incpay.vercel.app/pay/{code}`.
+4. Scan the QR code with a mobile device or navigate to `https://inc-pay.vercel.app/pay/{code}`.
 5. Enter a test payment (e.g. ₵2.00).
 6. Complete payment via Paystack checkout using a real mobile money wallet or debit card.
 7. Confirm that:
