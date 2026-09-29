@@ -1,8 +1,10 @@
 import logging
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 import resend
 
 from app.config import get_settings
+
+from urllib.parse import quote_plus
 
 logger = logging.getLogger(__name__)
 
@@ -12,6 +14,7 @@ def send_receipt_email(
     seller_name: str,
     pdf_bytes: bytes,
     reference: str,
+    customer_id: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
     Send an official payment receipt PDF to the customer via Resend.
@@ -40,6 +43,32 @@ def send_receipt_email(
 
     subject = f"Your IncPay Receipt — {seller_name}"
 
+    # Determine customer account call-to-action
+    frontend_url = settings.FRONTEND_URL.split(",")[0].strip() or "https://incpay.vercel.app"
+    if not customer_id:
+        encoded_email = quote_plus(customer_email)
+        signup_url = f"{frontend_url.rstrip('/')}/customer/signup?email={encoded_email}"
+        account_cta_html = f"""
+    <div style="background-color: #f0fdfa; border: 1px solid #ccfbf1; border-radius: 8px; padding: 18px; margin-bottom: 24px; text-align: center;">
+      <p style="color: #0f766e; font-size: 14px; font-weight: 700; margin: 0 0 6px 0;">🎉 Create your personal IncPay coupon</p>
+      <p style="color: #115e59; font-size: 13px; line-height: 20px; margin: 0 0 14px 0;">
+        Track all your receipts, generate your digital loyalty QR card, and view your purchase history in one place.
+      </p>
+      <a href="{signup_url}" style="display: inline-block; background-color: #0d9488; color: #ffffff; text-decoration: none; font-size: 13px; font-weight: 600; padding: 10px 20px; border-radius: 6px;">
+        Claim Your Free Account &amp; Coupon
+      </a>
+    </div>"""
+    else:
+        dashboard_url = f"{frontend_url.rstrip('/')}/customer/dashboard"
+        account_cta_html = f"""
+    <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 14px; margin-bottom: 24px; text-align: center;">
+      <p style="color: #0f766e; font-size: 13px; font-weight: 600; margin: 0 0 4px 0;">✓ Linked to your IncPay Customer Account</p>
+      <p style="color: #64748b; font-size: 12px; margin: 0 0 10px 0;">This transaction has been logged to your dashboard.</p>
+      <a href="{dashboard_url}" style="color: #0d9488; font-size: 12px; font-weight: 600; text-decoration: underline;">
+        View Customer Dashboard →
+      </a>
+    </div>"""
+
     html_content = f"""<!DOCTYPE html>
 <html>
 <head>
@@ -63,9 +92,11 @@ def send_receipt_email(
       <p style="color: #059669; font-size: 13px; font-weight: 600; margin: 0;">✓ Payment Completed &amp; Verified</p>
     </div>
 
-    <p style="color: #4b5563; font-size: 14px; line-height: 22px; margin: 0 0 24px 0;">
+    <p style="color: #4b5563; font-size: 14px; line-height: 22px; margin: 0 0 20px 0;">
       Your official receipt with your instant discount breakdown is attached to this email as <strong>receipt-{reference}.pdf</strong>.
     </p>
+
+    {account_cta_html}
 
     <div style="border-top: 1px solid #e5e7eb; padding-top: 16px; font-size: 12px; color: #9ca3af; text-align: center;">
       <p style="margin: 0;">Secured by IncPay • Direct Merchant Split Settlements in Ghanaian Cedis (₵)</p>

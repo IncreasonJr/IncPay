@@ -17,6 +17,9 @@ class Settings(BaseSettings):
     RESEND_API_KEY: str = ""
     RESEND_FROM_EMAIL: str = "onboarding@resend.dev"
 
+    # Customer digital coupon signing secret (fallback to PAYSTACK_SECRET_KEY if empty)
+    COUPON_SIGNING_SECRET: str = ""
+
     # Frontend CORS origin
     FRONTEND_URL: str = "http://localhost:5173"
 

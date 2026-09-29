@@ -1,11 +1,15 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
 import client from '../api/client';
+import Toast from '../components/Toast';
 
 export default function PaySuccess() {
   const [searchParams] = useSearchParams();
   const reference = searchParams.get('reference') || '';
+  const isDemo = searchParams.get('demo') === 'true';
 
+  const { session } = useAuth();
   const [loading, setLoading] = useState(true);
   const [status, setStatus] = useState('loading'); // 'loading' | 'verified' | 'pending' | 'failed' | 'no_reference'
   const [amountPaid, setAmountPaid] = useState(null);
@@ -15,6 +19,14 @@ export default function PaySuccess() {
   const baseURL = import.meta.env.VITE_API_URL || '';
 
   const verifyPayment = useCallback(async () => {
+    if (isDemo) {
+      setStatus('verified');
+      setAmountPaid(90.00);
+      setCustomerEmail('guest.shopper@gmail.com');
+      setLoading(false);
+      return;
+    }
+
     if (!reference || reference === '—') {
       setStatus('no_reference');
       setLoading(false);
@@ -58,21 +70,55 @@ export default function PaySuccess() {
     verifyPayment();
   }, [verifyPayment]);
 
+  const [toast, setToast] = useState(null);
+  const showToast = (message, type = 'info') => setToast({ message, type });
+
   const handleCopyRef = async () => {
     if (!reference) return;
     try {
       await navigator.clipboard.writeText(reference);
       setCopied(true);
+      showToast('Payment reference copied to clipboard.', 'success');
       setTimeout(() => setCopied(false), 2000);
     } catch (err) {
       console.error('Failed to copy reference:', err);
     }
   };
 
-  const receiptUrl = `${baseURL}/api/public/receipt/${encodeURIComponent(reference)}`;
+  const [downloading, setDownloading] = useState(false);
+
+  const handleDownloadReceipt = async () => {
+    if (!reference) return;
+    if (isDemo) {
+      showToast('Demo Payment Preview: Official PDF receipts are automatically generated and downloadable for live Paystack transactions.', 'info');
+      return;
+    }
+    setDownloading(true);
+    try {
+      const response = await client.get(`/api/public/receipt/${encodeURIComponent(reference)}`, {
+        responseType: 'blob',
+      });
+      const blob = new Blob([response.data], { type: 'application/pdf' });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `receipt-${reference}.pdf`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+      showToast(`Receipt for payment ${reference} downloaded.`, 'success');
+    } catch (err) {
+      console.error('Failed to download receipt PDF:', err);
+      showToast('Unable to download receipt. Please verify that this transaction was processed successfully.', 'error');
+    } finally {
+      setDownloading(false);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col justify-between py-6 sm:py-12 px-3 sm:px-6">
+      <Toast message={toast?.message} type={toast?.type} onClose={() => setToast(null)} />
       <div className="max-w-md w-full mx-auto my-auto">
         <div className="flex justify-center mb-5 sm:mb-6">
           <img src="/logo.png" alt="IncPay" className="h-8 w-auto object-contain" />
@@ -104,8 +150,47 @@ export default function PaySuccess() {
               </p>
 
               {customerEmail && (
-                <div className="bg-emerald-50 border border-emerald-100 rounded-xl p-3 mb-6 text-xs text-emerald-800 text-center">
+                <div className="bg-emerald-50 border border-emerald-100 rounded-xl p-3 mb-4 text-xs text-emerald-800 text-center">
                   <span>✉️ A copy of your receipt has been sent to <strong>{customerEmail}</strong></span>
+                </div>
+              )}
+
+              {/* Customer Account Status & Guest Signup CTA */}
+              {!session ? (
+                <div className="bg-teal-50 border border-teal-200/80 rounded-2xl p-4 mb-6 text-left shadow-sm">
+                  <div className="flex items-start gap-3">
+                    <div className="w-8 h-8 rounded-xl bg-teal-600 text-white flex items-center justify-center font-bold text-sm shrink-0 shadow-sm">
+                      🎁
+                    </div>
+                    <div className="space-y-1">
+                      <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
+                        Get Your Personal IncPay Coupon
+                      </h3>
+                      <p className="text-xs text-slate-600 leading-relaxed">
+                        Create a free account to track your payment history, download past receipts anytime, and receive your personal loyalty QR code.
+                      </p>
+                      <div className="pt-2">
+                        <Link
+                          to={`/customer/signup${customerEmail ? `?email=${encodeURIComponent(customerEmail)}` : ''}`}
+                          className="inline-block px-3.5 py-2 bg-teal-600 hover:bg-teal-700 text-white text-xs font-bold rounded-lg shadow-sm transition"
+                        >
+                          Claim Your Free Coupon Card →
+                        </Link>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 mb-6 text-center">
+                  <p className="text-xs text-slate-600 mb-1">
+                    ✓ Logged to your IncPay customer profile.
+                  </p>
+                  <Link
+                    to="/customer/dashboard"
+                    className="text-xs font-bold text-teal-600 hover:text-teal-700 underline"
+                  >
+                    View in Customer Dashboard →
+                  </Link>
                 </div>
               )}
             </div>
@@ -187,28 +272,36 @@ export default function PaySuccess() {
           <div className="space-y-3">
             {/* Download Receipt PDF Button (Only on verified success) */}
             {!loading && status === 'verified' && reference && (
-              <a
-                href={receiptUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                download={`receipt-${reference}.pdf`}
-                className="w-full flex items-center justify-center space-x-2 py-3 px-4 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-sm rounded-xl shadow-sm transition-colors text-center"
+              <button
+                type="button"
+                onClick={handleDownloadReceipt}
+                disabled={downloading}
+                className="w-full flex items-center justify-center space-x-2 py-3 px-4 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-semibold text-sm rounded-xl shadow-sm transition-colors text-center cursor-pointer"
               >
-                <svg
-                  className="w-4 h-4 shrink-0"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth="2"
-                    d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
-                  />
-                </svg>
-                <span>Download Receipt (PDF)</span>
-              </a>
+                {downloading ? (
+                  <>
+                    <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin shrink-0"></span>
+                    <span>Generating Receipt...</span>
+                  </>
+                ) : (
+                  <>
+                    <svg
+                      className="w-4 h-4 shrink-0"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth="2"
+                        d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
+                      />
+                    </svg>
+                    <span>Download Receipt (PDF)</span>
+                  </>
+                )}
+              </button>
             )}
 
             <Link

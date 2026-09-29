@@ -61,6 +61,10 @@ class TransactionBase(BaseModel):
         pattern=r"^[^@\s]+@[^@\s]+\.[^@\s]+$",
         description="Customer email address",
     )
+    customer_id: Optional[UUID] = Field(
+        None,
+        description="Optional customer account ID if customer was registered or logged in",
+    )
 
 
 class TransactionCreate(TransactionBase):

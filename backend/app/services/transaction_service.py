@@ -181,6 +181,7 @@ def _send_receipt_if_eligible(
     customer_email: Optional[str],
     transaction_id: Optional[Any],
     metadata: Optional[Dict[str, Any]] = None,
+    customer_id: Optional[Any] = None,
 ) -> None:
     """
     Safely generates and sends a receipt PDF via email if customer email is provided.
@@ -202,12 +203,18 @@ def _send_receipt_if_eligible(
 
         pdf_bytes = receipt_service.generate_receipt_pdf(tx_data, seller_data)
         seller_name = seller_data.get("business_name") or "Merchant Partner"
-        email_service.send_receipt_email(customer_email, seller_name, pdf_bytes, reference)
+        email_service.send_receipt_email(
+            customer_email,
+            seller_name,
+            pdf_bytes,
+            reference,
+            customer_id=str(customer_id) if customer_id else None,
+        )
 
         log_service.log_event(
             event="receipt_sent",
             transaction_id=transaction_id,
-            payload={"customer_email": customer_email, "reference": reference},
+            payload={"customer_email": customer_email, "reference": reference, "customer_id": str(customer_id) if customer_id else None},
         )
     except Exception as exc:
         logger.error(f"Failed to dispatch receipt email for ref '{reference}': {exc}")
@@ -310,13 +317,15 @@ def create_transaction_from_webhook(data: Dict[str, Any]) -> Dict[str, Any]:
 
             final_tx = updated or existing_tx
             if target_status == TransactionStatus.SUCCESS:
+                final_cid = getattr(final_tx, "customer_id", None) if not isinstance(final_tx, dict) else final_tx.get("customer_id")
                 _send_receipt_if_eligible(
-                    tx_data=final_tx.model_dump(),
-                    seller_id=final_tx.seller_id,
+                    tx_data=final_tx.model_dump() if not isinstance(final_tx, dict) else final_tx,
+                    seller_id=getattr(final_tx, "seller_id", None) if not isinstance(final_tx, dict) else final_tx.get("seller_id"),
                     reference=reference,
-                    customer_email=final_tx.customer_email,
+                    customer_email=getattr(final_tx, "customer_email", None) if not isinstance(final_tx, dict) else final_tx.get("customer_email"),
                     transaction_id=existing_tx.id,
                     metadata=tx_payload.get("metadata"),
+                    customer_id=final_cid,
                 )
 
             return final_tx.model_dump()
@@ -332,6 +341,13 @@ def create_transaction_from_webhook(data: Dict[str, Any]) -> Dict[str, Any]:
 
     seller_id_raw = metadata.get("seller_id")
     coupon_code = metadata.get("coupon_code")
+    customer_id_raw = metadata.get("customer_id")
+    customer_id: Optional[UUID] = None
+    if customer_id_raw:
+        try:
+            customer_id = UUID(str(customer_id_raw))
+        except ValueError:
+            pass
 
     # 4. Resolve Seller and Coupon details
     seller_id: Optional[UUID] = None
@@ -453,6 +469,7 @@ def create_transaction_from_webhook(data: Dict[str, Any]) -> Dict[str, Any]:
         seller_payout_amount=seller_payout_amount,
         status=target_status,
         customer_email=customer_email,
+        customer_id=customer_id,
     )
 
     # 7. Persist transaction and log event
@@ -476,6 +493,7 @@ def create_transaction_from_webhook(data: Dict[str, Any]) -> Dict[str, Any]:
                 customer_email=customer_email,
                 transaction_id=tx_id,
                 metadata=metadata,
+                customer_id=customer_id,
             )
 
         return created.model_dump() if created else tx_in.model_dump()

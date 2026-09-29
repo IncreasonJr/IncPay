@@ -58,6 +58,7 @@ def purge_data():
         ("transactions", "Customer transactions and split ledger"),
         ("coupons", "Seller payment coupons and QR codes"),
         ("sellers", "Onboarded merchant accounts"),
+        ("customers", "Registered customer profiles and loyalty coupons"),
     ]
 
     total_deleted = 0

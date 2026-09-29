@@ -89,7 +89,7 @@ export default function QrModal({ seller, onClose }) {
       URL.revokeObjectURL(downloadUrl);
     } catch (err) {
       console.error(`Download ${format.toUpperCase()} failed:`, err);
-      alert(`Failed to download ${format.toUpperCase()}: ${err.message}`);
+      setError(`Failed to download ${format.toUpperCase()}: ${err.message}`);
     } finally {
       setDownloadingFormat(null);
     }

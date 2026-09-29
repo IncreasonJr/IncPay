@@ -10,6 +10,10 @@ import SellerForm from './pages/admin/SellerForm';
 import Transactions from './pages/admin/Transactions';
 import TransactionDetail from './pages/admin/TransactionDetail';
 import ProtectedRoute from './components/ProtectedRoute';
+import CustomerProtectedRoute from './components/CustomerProtectedRoute';
+import CustomerSignup from './pages/customer/CustomerSignup';
+import CustomerLogin from './pages/customer/CustomerLogin';
+import CustomerDashboard from './pages/customer/CustomerDashboard';
 
 export default function App() {
   return (
@@ -23,6 +27,19 @@ export default function App() {
         {/* Public Customer Payment Routes */}
         <Route path="/pay/:couponCode" element={<Pay />} />
         <Route path="/pay/success" element={<PaySuccess />} />
+
+        {/* Customer Portal Routes */}
+        <Route path="/customer/signup" element={<CustomerSignup />} />
+        <Route path="/customer/login" element={<CustomerLogin />} />
+        <Route path="/customer/preview" element={<CustomerDashboard isDemo={true} />} />
+        <Route
+          path="/customer/dashboard"
+          element={
+            <CustomerProtectedRoute>
+              <CustomerDashboard />
+            </CustomerProtectedRoute>
+          }
+        />
 
         {/* Protected Admin Routes */}
         <Route

@@ -6,7 +6,7 @@ from slowapi.errors import RateLimitExceeded
 
 from app.config import check_critical_settings, get_settings
 from app.limiter import limiter
-from app.routers import auth, health, payments, sellers, transactions, webhooks
+from app.routers import auth, customers, health, payments, sellers, transactions, webhooks
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -66,6 +66,7 @@ def on_startup():
 # Include routers
 app.include_router(health.router)
 app.include_router(auth.router)
+app.include_router(customers.router)
 app.include_router(sellers.router)
 app.include_router(payments.router)
 app.include_router(transactions.router)

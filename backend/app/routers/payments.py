@@ -3,9 +3,10 @@ import re
 from decimal import Decimal, ROUND_HALF_UP
 from typing import Any, Dict, Optional
 from uuid import uuid4
-from fastapi import APIRouter, HTTPException, Request, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from pydantic import BaseModel, Field
 
+from app.auth import get_optional_customer
 from app.config import get_settings
 from app.limiter import limiter
 from app.services import (
@@ -43,6 +44,7 @@ class PaymentInitializeRequest(BaseModel):
         description="Original listed bill amount before discount in GHS (₵)",
     )
     email: Optional[str] = Field(None, description="Customer contact email for payment receipt")
+    customer_coupon_token: Optional[str] = Field(None, description="Optional customer digital coupon token")
 
 
 class PaymentInitializeResponse(BaseModel):
@@ -112,13 +114,25 @@ def get_public_coupon(request: Request, code: str) -> PublicCouponResponse:
 def initialize_payment(
     request: Request,
     payment_data: PaymentInitializeRequest,
+    current_customer: Optional[dict] = Depends(get_optional_customer),
 ) -> PaymentInitializeResponse:
     """
     Initialize a customer payment checkout session.
-    No authentication required.
+    No authentication required (guest checkout supported).
+    If customer token or session is provided, links transaction to customer history.
     Server strictly recalculates all payable amounts from the verified seller discount D.
     """
     settings = get_settings()
+
+    # Check if customer coupon token was provided directly in request body
+    if not current_customer and payment_data.customer_coupon_token:
+        from app.services.customer_coupon_service import verify_coupon_token
+        from app.services.customer_service import get_customer_by_id
+        token_info = verify_coupon_token(payment_data.customer_coupon_token)
+        if token_info and "customer_id" in token_info:
+            cust = get_customer_by_id(token_info["customer_id"])
+            if cust and cust.get("is_active", True):
+                current_customer = cust
 
     # 1. Validate listed amount value and bounds
     raw_amount = payment_data.listed_amount
@@ -177,7 +191,7 @@ def initialize_payment(
             detail="Seller is not configured for payments.",
         )
 
-    # 4. Validate customer email format if provided
+    # 4. Validate customer email format if provided (or auto-populate from authenticated customer)
     customer_email: str
     if payment_data.email and payment_data.email.strip():
         clean_email = payment_data.email.strip()
@@ -187,6 +201,8 @@ def initialize_payment(
                 detail="Invalid email address format.",
             )
         customer_email = clean_email
+    elif current_customer and current_customer.get("email"):
+        customer_email = current_customer["email"]
     else:
         customer_email = "noreply@incpay.app"
 
@@ -217,6 +233,11 @@ def initialize_payment(
         "customer_discount_amount": float(customer_discount_amount),
         "amount_paid": float(amount_paid),
     }
+
+    if current_customer:
+        metadata["customer_id"] = str(current_customer["id"])
+        if current_customer.get("full_name"):
+            metadata["customer_name"] = str(current_customer["full_name"])
 
     # 7. Initialize Paystack split transaction
     try:
